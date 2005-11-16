@@ -1412,7 +1412,7 @@ void setup_folds(vector <  vector <int> >* a, vector <  vector <int> >* b){
   int balancecv=0;
   vector <int> props; props.resize(labels.size());
   int propsum = 0;
-  for (int k = 0; k != (int)labels.size()-1; ++k){ // for each label
+  for (int k = 0; k != (int)labels.size(); ++k){ // for each label
       props[k] = label_map[k].size()/folds;   // count how many we can put in each fold
       propsum += props[k];
       if (props[k] < 1){
@@ -1422,13 +1422,7 @@ void setup_folds(vector <  vector <int> >* a, vector <  vector <int> >* b){
 	  balancecv=1;
       }
   }
-  props[labels.size()-1] = data_map[TRAIN].size()/folds - propsum;
-  if (props[labels.size()-1] < 1){
-      //printf("Error: The number of examples for label %i is too small to balance the folds. ",labels[labels.size()-1]);
-      //printf("Please decrease the number of folds!");
-	  printf("Warning: making sure each fold has enough training examples of each class, using subsampling instead.\n");
-	  balancecv=1;
-  }
+
 
 
   (*a).resize(folds); (*b).resize(folds);
