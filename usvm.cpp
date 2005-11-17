@@ -23,7 +23,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111, USA
  *
  ***********************************************************************/
-
+ 
 
 
 #include <stdio.h>
@@ -32,13 +32,15 @@
 
 #include "svqp2/svqp2.h"
 #include "svqp2/vector.h"
- 
+
+// various kernels 
 #define LINEAR  0
 #define POLY    1
 #define RBF     2
 #define SIGMOID 3 
 #define CUSTOM 4
 
+// different univserum training algorithms
 #define MULTIUNI 1
 #define RAMPUNI 2
 
@@ -62,12 +64,14 @@ char *optimizer_table[] = {"svqp2","cccp"};
 #define UNLABSAMP 2
 #define EXTRASAMP 4
 
+#define MAX_LOOPS 20 // maximum number of loops for tsvm training, should converge before this value, anyway..
 
 #include <fstream>
 #include <ctime>
 #include <iostream>
-using namespace std;
 
+
+/*********************** Split file storage class ******************/
 
 class ID // class to hold split file indices and labels
 {
@@ -83,6 +87,8 @@ bool operator<(const ID& x, const ID& y)
     return x.x < y.x;
 }
 
+/*********************** Little Stopwatch class ******************/
+using namespace std;
 class stopwatch
 {
 public:
@@ -106,20 +112,24 @@ stopwatch::~stopwatch()
  //cout<<"Time(secs): "<<double(total)/CLOCKS_PER_SEC<<endl;
 }
 
+/*******************************************************************/
+
+
+
 /**********************  Variable Declarations *****************************/
-double gap=0.05;
+double gap=0.05;                  // gap for universum
 double s_ramp = -1;               // parameter for ramp loss
 double s_trans = 0;               // parameter for transductive SVM
-bool s_spec = 0;
+bool s_spec = 0;                  // did the user specify s?
 int verbosity=1;                  // verbosity level, 0=off
-int transduction_only=1;	
+int transduction_only=1;	  // only train tranduction?
 
 /* Variable to store different parameters of data*/
-double un_weight  = 0.0;
-int mall;           				// train+test size
- int m=0;                           // training set size
-int m_map[4];
-int max_index;
+double un_weight  = 0.0;           // linear coefficient for the special kernel column
+int mall;           		   // train+test size
+int m=0;                           // training set size
+int m_map[4];                      // map to the training set sizes
+int max_index;                     // maximal index of the training/testing vectors
 
 
 /* Regularizer variables*/
@@ -130,48 +140,44 @@ double C3=1;                    // C, penalty on unlabeled
 
 /* Variables for data*/
 vector <lasvm_sparsevector_t*> X; // feature vectors
-vector <int>  Y;         // labels
+vector <int>  Y;                  // labels
 vector < vector <int> >  multi_Y; // labels for multiclass
 vector <double> kparam;           // kernel parameters
 vector <double> x_square;         // norms of input vectors, used for RBF
-vector <int> data_map[4];
-vector <double> global_ext_K;
-vector <int> labels;
+vector <int> data_map[4];         // maps to the indices of train/test/... data
+vector <double> global_ext_K;     // additional kernel column for transduction
+vector <int> labels;              // all different labels, that occured in the datafiles
 
 /* Variables for the model*/
-vector <double> alpha;  // alpha_i, SV weights
-vector< vector<double> > multi_alpha;
-vector<double> multi_b0;
-double b0;               // threshold
-int use_b0=1;                     // use threshold via constraint \sum a_i y_i =0
-int kernel_type=LINEAR;              // LINEAR, POLY, RBF or SIGMOID kernels
-vector <double> beta;
-double b_ramp = 0.0;
-vector <double> Yest;
-vector < vector<double> > D;
-double C_star = VERYBIG;
+vector <double> alpha;                   // alpha_i, SV weights
+vector< vector<double> > multi_alpha;    // alpha_ij for multiclass
+vector<double> multi_b0;                 // thresholds for multiclass
+double b0;                               // threshold
+int use_b0=1;                            // use threshold via constraint \sum a_i y_i =0
+int kernel_type=LINEAR;                  // specifies the type of the kernel
+vector <double> beta;                    // vector with betas for transduction
+vector <double> Yest;                    // temporary vector to store the prediction
+vector < vector<double> > D;             // 2D vector to store the function values of the test points
+double C_star = VERYBIG;                 // C, penalty for the alpha of the special kernel column
 
 /* Algorithm parameters*/
-double degree=3,kgamma=2,coef0=0;// kernel params
-int cl=2;                         // number of classes
-int optimizer=SVQP; // strategy of optimization
-int folds=-1; // if folds=-1 --> no cross validation
-int use_ext_K = 0;
-int do_multi_class = 0;
-int prob_size = 0;
-int fill_level = 0;
+double degree=3,kgamma=2,coef0=0;        // kernel params
+int cl=2;                                // number of classes
+int optimizer=SVQP;                      // strategy of optimization
+int folds=-1;                            // if folds=-1 --> no cross validation, else do folds fold CV
+int use_ext_K = 0;                       // use extra kernel column?
+int do_multi_class = 0;                  // do multiclass?
+int prob_size = 0;                       // size of the problem (different to dataset size!)
+int fill_level = 0;                      // temporary variable for setting up the problem
 
 /* Programm behaviour*/
-char report_file_name[1024];
-char split_file_name[1024]="\0";
-int cache_size=256;              // 256Mb cache size as default
-double epsgr=1e-3;                // tolerance on gradients
-int saves=1;
-int multiclass_cache=1;            // cache kernels between different classes...
-long long kcalcs=0;
-ofstream time_file;
+char report_file_name[1024];             // filename for the training report
+char split_file_name[1024]="\0";         // filename for the splits
+int cache_size=256;                      // 256Mb cache size as default
+double epsgr=1e-3;                       // tolerance on gradients
+long long kcalcs=0;                      // number of kernel evaluations
 int binary_files=0;
-int use_universum = 0;
+int use_universum = 0;                   // specifies the training algorithm used for universum
 vector <ID> splits; 
 
 
@@ -364,9 +370,6 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *univ
 			case 'e':
 				epsgr = atof(argv[i]);
 				break;
-			case 'N':
-				multiclass_cache=atoi(argv[i]);
-				break;
 			case 'R':
 				seed=atoi(argv[i]);
 				break;
@@ -397,7 +400,6 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *univ
 	}
 
 }
-
 
 
 
@@ -609,7 +611,7 @@ int binary_load_data(char *filename)
             {
                 if(splits.size()>0 && (splits[splitpos-1].y!=0 && splits[splitpos-1].y!=-99))
                     Y.push_back(splits[splitpos-1].y);
-                else
+                else 
                     Y.push_back(sz[0]);
             }
             val.resize(sz[1]); ind.resize(sz[1]);
@@ -701,11 +703,11 @@ int sample_type(int i){
 
 
 
-double kernel( int i,  int j, void *kparam)
+double kernel(int i, int j, void *kparam)
 {
   double dot;
  
-  if (use_ext_K && (i == (int)X.size() || j == (int)X.size())){
+  if (use_ext_K && (i == (int) X.size() || j == (int) X.size())){
       return global_ext_K[min(i, j )];
   }
 
@@ -742,7 +744,7 @@ FILE *fp;
 double calc_multi_class_accuracy(vector< vector <double> > *muYest){
     int pred, acc; double max;
     acc = 0;
-    for ( int j = 0; j != (int)data_map[TEST].size(); ++j){
+    for (int j = 0; j != (int) data_map[TEST].size(); ++j){
 	max =(*muYest)[0][j]; pred = labels[0];
 	for (int i = 1; i != do_multi_class; ++i){
 	    if ((*muYest)[i][j] > max){
@@ -754,7 +756,7 @@ double calc_multi_class_accuracy(vector< vector <double> > *muYest){
 	if (Y[data_map[TEST][j]] == pred) ++acc;
     }
     printf("===========================================\n");
-    printf("   Accuracy= %g (%d/%d)\n",(acc/((double) data_map[TEST].size()))*100.0,((int)acc),data_map[TEST].size());
+    printf("   Accuracy= %g (%d/%d)\n",(acc/(double)data_map[TEST].size())*100,((int)acc),data_map[TEST].size());
     printf("===========================================\n");
     return 100 * (double)acc/(double)data_map[TEST].size();
 
@@ -762,7 +764,7 @@ double calc_multi_class_accuracy(vector< vector <double> > *muYest){
   
  
 double test_current_model(char *fname){
-     int i,j; double y,balconstr; double acc=0;
+    int i,j; double y,balconstr; double acc=0;
     // clear vector that stores test results
     Yest.resize(0);
     D.resize(D.size()+1);
@@ -785,13 +787,13 @@ double test_current_model(char *fname){
 	if(((int)y)==Y[data_map[TEST][i]]) acc++;
     }
     // store the function values for the report file
-    for (int i = 0; i != (int)Yest.size(); ++i)
+    for (int i = 0; i !=(int) Yest.size(); ++i)
 	D[D.size()-1].push_back(Yest[i]);
 
 
     if (do_multi_class == 0){
 	printf("===========================================\n");
-	printf("   Accuracy= %g (%d/%d)\n",(acc/((double)data_map[TEST].size()))*100,((int)acc),(int)data_map[TEST].size());
+	printf("   Accuracy= %g (%d/%d)\n",(acc/(double)data_map[TEST].size())*100,((int)acc),data_map[TEST].size());
 	printf("===========================================\n");
     }
  
@@ -805,7 +807,7 @@ double test_current_multi_class_model(char *fname){
     for (int i = 0; i != do_multi_class; ++i){
 	alpha = multi_alpha[i]; b0 = multi_b0[i];
 	test_current_model(fname);
-	for (int j = 0; j != (int)data_map[TEST].size(); ++j){
+	for (int j = 0; j != (int) data_map[TEST].size(); ++j){
 	    multi_Yest[i].push_back(Yest[j]); 
 	}
     }
@@ -816,17 +818,17 @@ double test_current_multi_class_model(char *fname){
 	int y = 0; int acc = 0;
 	D.resize(D.size()+1);
 	
-	for (int i = 0; i != (int)data_map[TEST].size(); ++i){
+	for (int i = 0; i !=(int) data_map[TEST].size(); ++i){
 	    Yest.push_back(multi_Yest[0][i] *(double)labels[0] + multi_Yest[1][i]*(double)labels[1]);
 	    if (Yest[i] >= 0) y = 1; else y = -1;
 	    if (y == Y[data_map[TEST][i]]) ++acc;
 	}
-	for (int i = 0; i != (int)Yest.size(); ++i)
+	for (int i = 0; i !=(int) Yest.size(); ++i)
 	    D[D.size()-1].push_back(Yest[i]);
 	
 	
 	printf("===========================================\n");
-	printf("   Accuracy= %g (%d/%d)\n",(acc/((double)data_map[TEST].size()))*100,((int)acc),data_map[TEST].size());
+	printf("   Accuracy= %g (%d/%d)\n",(acc/(double)data_map[TEST].size())*100,((int)acc),data_map[TEST].size());
 	printf("===========================================\n");
 
 	return  (acc/(double)data_map[TEST].size())*100;
@@ -864,9 +866,10 @@ void set_alphas_b0(SVQP2* sv){
     }
     if (optimizer == SVQP){
       b0=(sv->gmin+ sv->gmax)/2.0;
-    }else if (optimizer == CCCP){
-      b0=b_ramp;
     }
+
+
+
 }
 
 /************************* preprocessing routines*********************************************/
@@ -1033,12 +1036,12 @@ double do_ramp_loop(SVQP2* sv,bool firstiter){
       fvals_without_b.push_back(sv->b[ip[i]] - sv->g[ip[i]]); // y = f(x) - b
   }
   // compute b(t+1) 
-  b_ramp = (sv->gmin+ sv->gmax)/2.0;
+  b0 = (sv->gmin+ sv->gmax)/2.0;
  
 
   // compute beta(t+1) for training point but only if we are not doing any transduction
   for(int i=0;i<prob_size-extra;i++){
-      y = fvals_without_b[i] + b_ramp; // y = f(x)
+      y = fvals_without_b[i] + b0; // y = f(x)
       if (optimizer == CCCP){ // only when CCCP is explicitly specified for TRAIN and UNIVERSUM
 	  if (sample_type(sv->Aperm[ip[i]]) == TRAINSAMP && use_universum != RAMPUNI){
 	      // determine new beta[i](t+1)
@@ -1109,9 +1112,9 @@ void print_fvals(char* fval_file_name){
   FILE *fp2;
   fp2 = fopen(fval_file_name,"w");
   fprintf(fp2,"\n# function values\n");
-  for (int i = 0; i != (int)D.size(); ++i){
+  for (int i = 0; i !=(int) D.size(); ++i){
       fprintf(fp2,"f{%i} = [ %g",i+1,D[i][0]);
-      for (int j = 1; j != (int)D[i].size(); ++j)
+      for (int j = 1; j != (int) D[i].size(); ++j)
 	  fprintf(fp2," ,%g",D[i][j]);
       fprintf(fp2,"];\n");
   }
@@ -1126,7 +1129,7 @@ void print_report(vector<double> testerr){
   fprintf(fp2,"training=%i\n",data_map[TRAIN].size());
   fprintf(fp2,"test=%i\n",data_map[TEST].size());
   fprintf(fp2,"unlabeled=%i\n",data_map[UNLABELED].size());
-  fprintf(fp2,"universum=%i\n",data_map[UNIVERSUM].size());
+  //fprintf(fp2,"universum=%i\n",data_map[UNIVERSUM].size());
 
   if (folds == -1){
     fprintf(fp2,"\n# training parameters\n");
@@ -1170,7 +1173,7 @@ void print_report(vector<double> testerr){
   fprintf(fp2,"optimizer=%s\n",optimizer_table[optimizer]);
 
   fprintf(fp2,"\n# training times\n");
-  for (int i = 0; i != (int)training_time.size(); ++i){
+  for (int i = 0; i !=(int) training_time.size(); ++i){
     fprintf(fp2,"time %i =%g\n",i+1,training_time[i]);
   }
 
@@ -1195,8 +1198,9 @@ void load_data(char* input_file_name,char* universum_file_name,char* testset_fil
 
     printf("Training data: \n");
     load_data_file(input_file_name);
+	printf("Done!\n");
 
-    // check, if data contains universum/unlabeled points
+    // check, if data contains universum/unlabeled points 
     for (int i = m_old; i != m;++i){
       if (Y[i] >= -1) data_map[TRAIN].push_back(i);
       else if (Y[i] == -2) data_map[UNIVERSUM].push_back(i); // universum has -2 
@@ -1206,14 +1210,15 @@ void load_data(char* input_file_name,char* universum_file_name,char* testset_fil
     printf("\n");
 
     //load universum data
-    printf("Universum: \n");
+    //printf("Universum: \n");
     if (universum_file_name[0] != '\0'){
        load_data_file(universum_file_name);
        for(int i=m_old;i!=m;++i){
         Y[i]=-2;
         data_map[UNIVERSUM].push_back(i);
        }
-    }else  printf("No Universum specified!\n");
+    }
+	//else  printf("No Universum specified!\n");
     m_old = m;
     printf("\n");
 
@@ -1234,6 +1239,7 @@ void load_data(char* input_file_name,char* universum_file_name,char* testset_fil
     printf("Unlabeled Data: \n");
     if (unlabeled_file_name[0] != '\0'){
        load_data_file(unlabeled_file_name);
+ 	   printf("Done!\n");
        for(int i=m_old;i != m;++i){
         Y[i] =-3;
         data_map[UNLABELED].push_back(i);
@@ -1245,7 +1251,8 @@ void load_data(char* input_file_name,char* universum_file_name,char* testset_fil
 
     printf("\n");
     printf("\n\nData successfully loaded:\n \tNumber of training examples: %i\n \tNumber of test examples: %i\n",data_map[TRAIN].size(),data_map[TEST].size());
-    printf("\tNumber of unlabeled examples: %i\n \tNumber of examples in universum: %i\n\n",data_map[UNLABELED].size(),data_map[UNIVERSUM].size());
+    printf("\tNumber of unlabeled examples: %i\n\n",data_map[UNLABELED].size()); 
+    //printf("\tNumber of unlabeled examples: %i\n \tNumber of examples in universum: %i\n\n",data_map[UNLABELED].size(),data_map[UNIVERSUM].size()); // uncomment in future version
 }
 /********************************************************************************************/
 
@@ -1259,9 +1266,9 @@ void setup_problem(SVQP2* sv){
     }else if (optimizer == CCCP || data_map[UNLABELED].size() > 0){
       if (data_map[UNLABELED].size() > 0){ // train transductive svm?
         un_weight = 0.0;
-        b_ramp = 0.0; 
+        b0 = 0.0; 
        
-        for (int i = 0; i != (int)data_map[TRAIN].size();++i){
+        for (int i = 0; i !=(int) data_map[TRAIN].size();++i){
           un_weight += (double)Y[data_map[TRAIN][i]];
         }
         un_weight /= (double) data_map[TRAIN].size();
@@ -1284,7 +1291,7 @@ void setup_problem(SVQP2* sv){
         if (data_map[UNLABELED].size() > 0) extend_to_tsvm_problem(sv,1);
       }else{ // train non-transductive svm
         beta.resize(0);
-        b_ramp = 0.0;
+        b0 = 0.0;
         // initialize loop variables
         for (int i = 0; i != prob_size; ++i){
           beta.push_back(0.0);
@@ -1306,23 +1313,30 @@ void training(SVQP2* sv){
     if (data_map[UNLABELED].size() > 0) use_ext_K = 1;
 
     if (optimizer == SVQP && data_map[UNLABELED].size() == 0){
-      sv->run(true,true);
+	  sv->run(true,true);
     }else if(optimizer == CCCP || data_map[UNLABELED].size() > 0){
       double beta_diff = 1.0;
-      beta_diff = do_ramp_loop(sv,1);
-      while (beta_diff > CCCP_TOL){
-	if (optimizer == CCCP){
-	    setup_ramp_svm_problem(sv,0);
-	    if (data_map[UNIVERSUM].size() > 0){// train CCCP with universum?
-		extend_to_ramp_universum_problem(sv,0);
-	    }
-	}
-        if (data_map[UNLABELED].size() > 0){// train transductive CCCP?
+      beta_diff = do_ramp_loop(sv,1); 
+	  int numloops=0;
+      while ((beta_diff > CCCP_TOL) && numloops<MAX_LOOPS)
+	  {
+		numloops++;
+		if (optimizer == CCCP)
+		{
+		    setup_ramp_svm_problem(sv,0);
+			 if (data_map[UNIVERSUM].size() > 0)
+			 {// train CCCP with universum?
+				extend_to_ramp_universum_problem(sv,0);
+			 }
+		}
+        if (data_map[UNLABELED].size() > 0)
+		{// train transductive CCCP?
           extend_to_tsvm_problem(sv,0);
         }
-	reset_alphas(sv);
+		reset_alphas(sv);
         beta_diff = do_ramp_loop(sv,0);
       }
+	  if(numloops==MAX_LOOPS) {printf("Max number of loops exceeded!\n");}
       use_ext_K = 0;
     }
     training_time.push_back(stop->get_time()-start_time);
@@ -1335,14 +1349,14 @@ void search_for_different_labels(){
     labels.resize(0);
     bool found = 0;
 
-    for (int i = 0; i != (int)Y.size(); ++i)
+    for (int i = 0; i !=(int) Y.size(); ++i)
     {
-		for (int j = 0; j != (int)labels.size(); ++j)
+		for (int j = 0; j != (int) labels.size(); ++j)
 		{
 			if (Y[i] < -1 || Y[i] == labels[j]){ found = 1; break;}
 		}
 		if (!found && Y[i]>=-1) labels.push_back(Y[i]);
-		if ((int)labels.size() == do_multi_class) break;
+		if ((int) labels.size() == do_multi_class) break;
 		found = 0;
     }
 
@@ -1351,7 +1365,7 @@ void search_for_different_labels(){
 void setup_labels_for_multiclass(){
     printf("Setting up labels for multiclass ...");
     multi_Y.resize(do_multi_class);
-    for (int j = 0; j != (int)Y.size(); ++j){
+    for (int j = 0; j != (int) Y.size(); ++j){
 	for (int i = 0; i != do_multi_class; ++i){
 	    if (Y[j] == labels[i]) multi_Y[i].push_back(1);
 	    else if (Y[j] < 0) multi_Y[i].push_back(Y[j]);
@@ -1382,7 +1396,7 @@ void multi_class_training(){
 	      // processing results
 	      set_alphas_b0(sv);
 	      multi_alpha[i].resize(0);
-	      for (int j = 0; j != (int)alpha.size(); ++j){
+	      for (int j = 0; j != (int) alpha.size(); ++j){
 		  multi_alpha[i].push_back(alpha[j]);
 	      }
 	      multi_b0.push_back(b0);
@@ -1401,8 +1415,8 @@ void setup_folds(vector <  vector <int> >* a, vector <  vector <int> >* b){
   vector < vector <int> > label_map; label_map.resize(labels.size());
 
   // get indices of positive and negative labels
-  for (int i = 0; i != (int) data_map[TRAIN].size(); ++i){
-      for (int k = 0; k != (int)labels.size(); ++k){
+  for (int i = 0; i !=(int) data_map[TRAIN].size(); ++i){
+      for (int k = 0; k != (int) labels.size(); ++k){
 	  if (Y[data_map[TRAIN][i]] == labels[k]){
 	      label_map[k].push_back(data_map[TRAIN][i]);
 	      break; 
@@ -1412,12 +1426,12 @@ void setup_folds(vector <  vector <int> >* a, vector <  vector <int> >* b){
   int balancecv=0;
   vector <int> props; props.resize(labels.size());
   int propsum = 0;
-  for (int k = 0; k != (int)labels.size(); ++k){ // for each label
+
+  for (int k = 0; k != (int) labels.size(); ++k){ // for each label
+
       props[k] = label_map[k].size()/folds;   // count how many we can put in each fold
       propsum += props[k];
       if (props[k] < 1){
-	  //printf("Error: The number of examples for label %i is too small to balance the folds. ",labels[k]);
-	  //printf("Please decrease the number of folds!");
 	  printf("Warning: making sure each fold has enough training examples of each class, using subsampling instead.\n");
 	  balancecv=1;
       }
@@ -1426,107 +1440,116 @@ void setup_folds(vector <  vector <int> >* a, vector <  vector <int> >* b){
 
 
   (*a).resize(folds); (*b).resize(folds);
-  vector <int> pointers; for (int k = 0; k != (int)labels.size(); ++k) pointers.push_back(0);
+  vector <int> pointers; for (int k = 0; k != (int) labels.size(); ++k) pointers.push_back(0);
 
-  if(!balancecv)
-  {
-  for (int i = 0; i != folds-1; ++i){
-    // get training vectors before testfold
-    for (int k = 0; k != (int)labels.size(); ++k){
-	for (int j = 0; j != pointers[k]; ++j){
-	    (*a)[i].push_back(label_map[k][j]);
+
+  if(!balancecv){
+    for (int i = 0; i != folds-1; ++i){
+      
+
+      // get training vectors before testfold
+      for (int k = 0; k != (int) labels.size(); ++k){
+	for (int j = 0; j != (int) pointers[k]; ++j){
+	  (*a)[i].push_back(label_map[k][j]);
 	}
-    }
-    // get test fold
-    for (int k = 0; k != (int)labels.size(); ++k){
-	for (int j = pointers[k]; j != pointers[k] + props[k]; ++j){
-	    (*b)[i].push_back(label_map[k][j]);
+      }
+
+
+      // get test fold
+      for (int k = 0; k != (int) labels.size(); ++k){
+	for (int j = pointers[k]; j != (int) pointers[k] + props[k]; ++j){
+	  (*b)[i].push_back(label_map[k][j]);
 	}
-    }
-    // update pointers
-    for (int k = 0; k != (int)labels.size(); ++k){
+      }
+
+      // update pointers
+      for (int k = 0; k != (int) labels.size(); ++k){
 	pointers[k] += props[k];
+      }
+    
+
+      // get training vectors after testfold
+      for (int k = 0; k != (int) labels.size(); ++k){
+	for (int j = pointers[k]; j != (int) label_map[k].size(); ++j){
+	  (*a)[i].push_back(label_map[k][j]);
+	}
+      }
+
+    }
+
+
+    // get training vectors before testfold
+    for (int k = 0; k != (int) labels.size(); ++k){
+      for (int j = 0; j != (int) pointers[k]; ++j){
+	(*a)[folds-1].push_back(label_map[k][j]);
+      }
     }
     
-    // get training vectors after testfold
-    for (int k = 0; k != (int)labels.size(); ++k){
-	for (int j = pointers[k]; j != (int)label_map[k].size(); ++j){
-	    (*a)[i].push_back(label_map[k][j]);
-	}
+    // get the remaining stuff in test fold
+    for (int k = 0; k != (int) labels.size(); ++k){
+      for (int j = pointers[k]; j != (int) label_map[k].size(); ++j){
+	(*b)[folds-1].push_back(label_map[k][j]);
+      }
     }
-  }
-
-  // get training vectors before testfold
-  for (int k = 0; k != (int)labels.size(); ++k){
-      for (int j = 0; j != pointers[k]; ++j){
-	  (*a)[folds-1].push_back(label_map[k][j]);
+    
+  }else{// force to add a point from each class
+    int i,j,k,p,q;
+    //printf("jasons method on %d splits, %d labels %d %d\n",folds,labels.size(),labels[0],labels[1]);
+    int labs=labels.size();
+    vector <int> data;
+    for(i=0;i<folds;i++)
+      {
+	data.resize(0); for(j=0;j<m;j++) data.push_back(j);
+	for(j=0;j<labs;j++) // add at least one example from each class
+	  {
+	    p= (int) ( ((float)i)/((float)folds) * ((float)data.size()));
+	    for(k=0;k<m;k++)
+	      {
+		if(Y[(k+p)%m]==labels[j]) { q=(k+p)%m;break;} // find example of each class
+	      }
+	    (*a)[i].push_back(q); data[q]=data[data.size()-1]; data.pop_back();
+	  }
+	
+	// now add some random examples to make roughly folds-1/folds of the dataset
+	p= (int) ( ((float)i)/((float)folds) * ((float)data.size()));
+	int max=(int) (((float)(folds-1.0))/((float)folds)*m);
+	for(j=0;j<max-(*a)[i].size();j++) // add at least one example from each class
+	  {
+	    p=p% data.size();
+	    (*a)[i].push_back(data[p]); 
+	    data[p]=data[data.size()-1]; data.pop_back();
+	    p++;
+	  }
+	
+	for(j=0;j<(int)data.size();j++) // add rest of examples to test set
+	  (*b)[i].push_back(data[j]);
+	
       }
-  }
-  // get the remaining stuff in test fold
-  for (int k = 0; k != (int)labels.size(); ++k){
-      for (int j = pointers[k]; j != (int)label_map[k].size(); ++j){
-	  (*b)[folds-1].push_back(label_map[k][j]);
-      }
+    
   }
   
-  }
-  else// force to add a point from each class
-  {
-		int i,j,k,p,q;
-		//printf("jasons method on %d splits, %d labels %d %d\n",folds,labels.size(),labels[0],labels[1]);
-		int labs=labels.size();
-		vector <int> data;
-		for(i=0;i<folds;i++)
-		{
-			data.resize(0); for(j=0;j<m;j++) data.push_back(j);
-			for(j=0;j<labs;j++) // add at least one example from each class
-			{
-				p= (int) ( ((float)i)/((float)folds) * ((float)data.size()));
-				for(k=0;k<m;k++)
-				{
-					if(Y[(k+p)%m]==labels[j]) { q=(k+p)%m;break;} // find example of each class
-				}
-				(*a)[i].push_back(q); data[q]=data[data.size()-1]; data.pop_back();
-			}
-
-			// now add some random examples to make roughly folds-1/folds of the dataset
-			p= (int) ( ((float)i)/((float)folds) * ((float)data.size()));
-			int max=(int) (((float)(folds-1.0))/((float)folds)*m);
-			for(j=0;j<max-((int)((*a)[i].size()));j++) // add at least one example from each class
-			{
-				p=p% data.size();
-				(*a)[i].push_back(data[p]); 
-				data[p]=data[data.size()-1]; data.pop_back();
-				p++;
-			}
-
-			for(j=0;j<(int)data.size();j++) // add rest of examples to test set
-				(*b)[i].push_back(data[j]);
-
-		}
-
-  }
+  
 }
 
 void compute_extra_K(){
 	printf("Computing kernel values for extra column ...");
 	global_ext_K.resize(X.size()+1);
 
-	for (int i = 0; i != (int)X.size()+1; ++i) global_ext_K[i] = 0.0; // initialize with zero
+	for (int i = 0; i !=(int) X.size()+1; ++i) global_ext_K[i] = 0.0; // initialize with zero
 	
 	if (C_star == 0.0){
 	    printf(" [OK]\n");
 	    return; // if the alpha for balancing is set to 0, there's nothing to do
      	}
-	for (int i = 0; i != (int)X.size(); ++i){
-	    for (int j = 0; j != (int)data_map[UNLABELED].size(); ++j){
+	for (int i = 0; i !=(int) X.size(); ++i){
+	    for (int j = 0; j != (int) data_map[UNLABELED].size(); ++j){
 		global_ext_K[i] += kernel(i,data_map[UNLABELED][j],NULL);
 	    }
 	    global_ext_K[i] /= (double)data_map[UNLABELED].size();
 	}
 
 
-	for (int i = 0; i != (int)data_map[UNLABELED].size(); ++i){
+	for (int i = 0; i !=(int) data_map[UNLABELED].size(); ++i){
 		global_ext_K[X.size()] += global_ext_K[data_map[UNLABELED][i]];
 	}
 	global_ext_K[X.size()] /= (double)data_map[UNLABELED].size();
@@ -1537,14 +1560,14 @@ void compute_extra_K(){
 /*******************************************************************************************/
 int main(int argc, char **argv)
 {
-    printf("===========================================\n");
-    printf("||                                       ||\n");
-    printf("||     UNIVERSVM                         ||\n");
-    printf("||                                       ||\n");
-    printf("||     Universal SVM 1.0                 ||\n");
-    printf("||                                       ||\n");
-    printf("||                                       ||\n");
-    printf("===========================================\n");
+    printf("=========================================================\n");
+    printf("||                                                     ||\n");
+    printf("||       UniverSVM                                     ||\n");
+    printf("||                                                     ||\n");
+    printf("||       CCCP SVM for large scale transduction         ||\n");
+    printf("||       Version 1.0                                   ||\n");
+    printf("||                                                     ||\n");
+    printf("==========================================================\n");
 
     //char input_file_name[1024];
     char input_file_name[1024]; input_file_name[0] = '\0';
@@ -1571,7 +1594,7 @@ int main(int argc, char **argv)
     printf("         Initalization   \n");
     printf("---------------------------------\n");
    
-	if(split_file_name[0]!='\0') split_file_load(split_file_name);
+    if(split_file_name[0]!='\0') split_file_load(split_file_name);
     load_data(input_file_name, universum_file_name, testset_file_name,unlabeled_file_name);
     search_for_different_labels(); // check how many different labels we have (universum and unlabeled excluded)
     printf("Data contains %i classes \n\n",labels.size());
@@ -1593,7 +1616,7 @@ int main(int argc, char **argv)
 	prob_size -=  data_map[UNIVERSUM].size();
     	int newLab = max(labels[0],labels[1])+1;
 	labels.push_back(newLab);
-	for (int i = 0; i != (int)data_map[UNIVERSUM].size();++i){
+	for (int i = 0; i !=(int) data_map[UNIVERSUM].size();++i){
 	    data_map[TRAIN].push_back(data_map[UNIVERSUM][i]);
 	    Y[data_map[UNIVERSUM][i]] = newLab;
 	}
@@ -1696,7 +1719,7 @@ int main(int argc, char **argv)
 	  }else{
 	      printf("Testing on training set with %i examples:\n",data_map[TRAIN].size());
 	      data_map[TEST].resize(0);
-	      for (int i = 0; i != (int)data_map[TRAIN].size(); ++i) 
+	      for (int i = 0; i !=(int) data_map[TRAIN].size(); ++i) 
 		  data_map[TEST].push_back(data_map[TRAIN][i]);
 	  }
 	  foldacc = test_current_multi_class_model(model_file_name);
@@ -1710,7 +1733,7 @@ int main(int argc, char **argv)
       
 
       printf("===========================================\n");
-      printf("\nMean Cross Validation Accuracy: %g\n", (float)meanacc);
+      printf("\nMean Cross Validation Accuracy: %g\n", meanacc);
       printf("===========================================\n");
     }
 
