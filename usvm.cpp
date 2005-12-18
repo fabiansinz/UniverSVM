@@ -536,7 +536,7 @@ int libsvm_load_data(char *filename)
             fscanf(fp,"%d:%lf",&index,&value);
 			
             if (write==1) lasvm_sparsevector_set(X[m+i],index,value);
-            if (write==2) lasvm_sparsevector_set(X[splitpos-1],index,value);
+            if (write==2) lasvm_sparsevector_set(X[m+splitpos-1],index,value); // <-- was this the (and the only) bug?
             if (index>max_index) max_index=index;
         }
     out2:
@@ -681,6 +681,7 @@ void load_data_file(char *filename)
         kgamma=1.0/ ((double) max_index); // same default as LIBSVM
 
     m+=msz;
+    
 }
 
 
@@ -1497,22 +1498,23 @@ void setup_folds(vector <  vector <int> >* a, vector <  vector <int> >* b){
     //printf("jasons method on %d splits, %d labels %d %d\n",folds,labels.size(),labels[0],labels[1]);
     int labs=labels.size();
     vector <int> data;
+    int train_m = data_map[TRAIN].size(); //train_m was =m before.
     for(i=0;i<folds;i++)
       {
-	data.resize(0); for(j=0;j<m;j++) data.push_back(j);
+	data.resize(0); for(j=0;j<train_m;j++) data.push_back(j);
 	for(j=0;j<labs;j++) // add at least one example from each class
 	  {
 	    p= (int) ( ((float)i)/((float)folds) * ((float)data.size()));
-	    for(k=0;k<m;k++)
+	    for(k=0;k<train_m;k++)
 	      {
-		if(Y[(k+p)%m]==labels[j]) { q=(k+p)%m;break;} // find example of each class
+		if(Y[(k+p)%train_m]==labels[j]) { q=(k+p)%train_m;break;} // find example of each class
 	      }
 	    (*a)[i].push_back(q); data[q]=data[data.size()-1]; data.pop_back();
 	  }
 	
 	// now add some random examples to make roughly folds-1/folds of the dataset
 	p= (int) ( ((float)i)/((float)folds) * ((float)data.size()));
-	int max=(int) (((float)(folds-1.0))/((float)folds)*m);
+	int max=(int) (((float)(folds-1.0))/((float)folds)*train_m);
 	for(j=0;j<max-(*a)[i].size();j++) // add at least one example from each class
 	  {
 	    p=p% data.size();

@@ -2,7 +2,7 @@
  * 
  *  LUSH Lisp Universal Shell
  *    Copyright (C) 2002 Leon Bottou, Yann Le Cun, AT&T Corp, NECI.
- *  Includes parts of TL3: 
+ *  Includes parts of TL3:
  *    Copyright (C) 1987-1999 Leon Bottou and Neuristique.
  *  Includes selected parts of SN3.2:
  *    Copyright (C) 1991-2001 AT&T Corp.
@@ -24,7 +24,7 @@
  ***********************************************************************/
 
 /***********************************************************************
- * $Id: vector.h,v 1.1 2005/11/11 21:31:20 agbs Exp $
+ * $Id: vector.h,v 1.3 2005/11/21 21:42:43 agbs Exp $
  **********************************************************************/
 
 #ifndef VECTOR_H
@@ -78,21 +78,14 @@ lasvm_sparsevector_t *lasvm_sparsevector_create(void);
 
 void lasvm_sparsevector_destroy(lasvm_sparsevector_t *v);
 
+void lasvm_sparsevector_output(lasvm_sparsevector_t *v);
+
+
+void lasvm_sparsevector_clear(lasvm_sparsevector_t *v);
+
 void lasvm_sparsevector_set(lasvm_sparsevector_t *v, int index, double data);
 
 double lasvm_sparsevector_get(lasvm_sparsevector_t *v, int index);
-  
-int lasvm_sparsevector_argmax(lasvm_sparsevector_t *v);
- 
-void lasvm_sparsevector_print(lasvm_sparsevector_t *v);
-
-int lasvm_sparsevector_size(lasvm_sparsevector_t *v);
-
-void lasvm_sparsevector_normalize(lasvm_sparsevector_t *v);
-
-void lasvm_sparsevector_scale(lasvm_sparsevector_t *v, float t);
-
-double lasvm_sparsevector_match(lasvm_sparsevector_t *v1, lasvm_sparsevector_t *v2);
 
 lasvm_sparsevector_t *lasvm_sparsevector_combine(lasvm_sparsevector_t *v1, double coeff1,
 						 lasvm_sparsevector_t *v2, double coeff2);

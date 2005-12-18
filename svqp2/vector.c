@@ -24,14 +24,13 @@
  ***********************************************************************/
 
 /***********************************************************************
- * $Id: vector.c,v 1.1 2005/11/11 21:31:20 agbs Exp $
+ * $Id: vector.c,v 1.3 2005/11/21 21:42:43 agbs Exp $
  **********************************************************************/
 
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h> 
 
 #include "messages.h"
 #include "vector.h"
@@ -112,7 +111,7 @@ lasvm_sparsevector_create(void)
 }
 
 void 
-lasvm_sparsevector_destroy(lasvm_sparsevector_t *v)
+lasvm_sparsevector_clear(lasvm_sparsevector_t *v)
 {
   lasvm_sparsevector_pair_t *p = v->pairs;
   while (p)
@@ -124,9 +123,29 @@ lasvm_sparsevector_destroy(lasvm_sparsevector_t *v)
   v->size = 0;
   v->npairs = 0;
   v->pairs = NULL;
-  v->last = NULL;
+  v->last = &v->pairs;
+}
+
+void 
+lasvm_sparsevector_destroy(lasvm_sparsevector_t *v)
+{
+  lasvm_sparsevector_clear(v);
   free(v);
 }
+
+void 
+lasvm_sparsevector_output(lasvm_sparsevector_t *v)
+{
+  lasvm_sparsevector_pair_t *p = v->pairs;
+  printf("[");
+  while (p){
+    printf("%i: %f, ",p->index,(double)p->data);
+    p = p->next;
+  }
+  printf("]\n");
+
+}
+
 
 double 
 lasvm_sparsevector_get(lasvm_sparsevector_t *v, int index)
@@ -153,91 +172,6 @@ quickappend(lasvm_sparsevector_t *v, int index, double data)
   v->last = &(d->next);
   v->size = index + 1;
   v->npairs += 1;
-}
-
-
-void lasvm_sparsevector_print(lasvm_sparsevector_t *v)
-{
-//  double best=-1e20; int best_ind=0;
-  lasvm_sparsevector_pair_t *p = v->pairs;
-  ASSERT(index>=0);
-  while (p )
-  {
-	printf("%d:%g ",p->index,p->data);
-	 p = p->next;	
-  }
-  printf("\n");
-}
-
-
-int lasvm_sparsevector_size(lasvm_sparsevector_t *v)
-{
-//  double best=-1e20; int best_ind=0;
-  lasvm_sparsevector_pair_t *p = v->pairs;
-  int sz=0;
-  ASSERT(index>=0);
-  while (p )
-  {
-    sz++;
-	p = p->next;	
-  }
-  return sz;
-}
-
-
-
-
-
-
-void lasvm_sparsevector_normalize(lasvm_sparsevector_t *v)
-{
-  double t=0,best=-1e20; int best_ind=0;
-  lasvm_sparsevector_pair_t *p = v->pairs;
-  ASSERT(index>=0);
-  while (p )
-  { 
-    t+= (p->data)*(p->data);
-	p = p->next;	
-  }
-  t=sqrt(t);
-  p = v->pairs;
-  while (p )
-  {
-    p->data /= t;
-	p = p->next;	
-  }
-  
-}
-
-
-void lasvm_sparsevector_scale(lasvm_sparsevector_t *v, float t)
-{
-  double best=-1e20; int best_ind=0;
-  lasvm_sparsevector_pair_t *p = v->pairs;
-  ASSERT(index>=0);
-  while (p )
-  {
-    p->data*=t;
-	p = p->next;	
-  }
-}
-
-
-int lasvm_sparsevector_argmax(lasvm_sparsevector_t *v)
-{
-  double best=-1e20; int best_ind=0;
-  lasvm_sparsevector_pair_t *p = v->pairs;
-  ASSERT(index>=0);
-  while (p )
-  {
-	if (p->data > best)
-	{
-		best= p->data;
-		best_ind=p->index;
-	}
-    p = p->next;	
-  }
-  return best_ind;
 }
 
 void 
