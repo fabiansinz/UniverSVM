@@ -189,7 +189,7 @@ vector<double> training_time;
 void exit_with_help()
 {
 	fprintf(stdout,
-	"Usage: usvm [options] training_set_file [model_file]\n"
+	"Usage: usvm [options] training_set_file\n"
 	"options:\n"
 	"-T test_set_file: test model on test set\n"
 	"-U universum_file : use universum. Universum points must have label -2\n"
