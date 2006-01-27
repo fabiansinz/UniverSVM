@@ -189,11 +189,28 @@ vector<double> training_time;
 void exit_with_help()
 {
 	fprintf(stdout,
-	"Usage: usvm [options] training_set_file\n"
-	"options:\n"
+	"\nUSAGE: usvm [options] training_set_file\n\n"
+	"OPTIONS:\n"
+	"FILE/DATA OPTIONS:\n"
 	"-T test_set_file: test model on test set\n"
 	"-U universum_file : use universum (it's also possible to include universum points \n"
 	"                    with label -2 in the training file)\n"
+	"-F model_file : Stores the trained model. The modelfile is a libsvm data file,\n"
+	"                where the labels correspond to alpha_i*y_i and the datapoints to\n"
+	"                the support vectors. The last datapoint is the null vector and\n"
+	"                its label corresponds to b. Saving a modelfile is not implemented\n"
+	"                for multiclass or cross validation at the moment. In this case it will\n"
+	"                store the last trained subproblem or fold respectively.\n"
+	"-u unlabeled_data_file : use unlabeled data (transductive SVM).\n"
+	"	         (it's also possible to include unlabeled points\n"
+	"                    with label -3 in the training file)\n"
+	"-B file format : files are stored in the following format:\n"
+	"	  0 -- libsvm ascii format (default)\n"
+	"	  1 -- binary format\n"
+	"	  2 -- split file format\n"
+	"-f file : output report file to given destination\n"
+	"-D file : output function values on test set(s) to given destination\n"
+	"\nOPTIMIZATION OPTIONS:\n"
 	"-V universum variant:\n" 
 	"	  0 -- Standard universum training (default)\n"
 	"	  1 -- Train SVM with universum by making it a 3-class multiclass\n"
@@ -201,16 +218,21 @@ void exit_with_help()
 	"	       {-1,U} vs. +1 (0=off default)\n"
 	"	       This switch works only for binary at the moment.\n"
 	"	  2 -- Train universum with ramp loss. This option requires \"-o 1\".\n"
-	"-u unlabeled_data_file : use unlabeled data (transductive SVM).\n"
-	"	     Unlabeled data must have label -3\n"
-	"-B file format : files are stored in the following format:\n"
-	"	  0 -- libsvm ascii format (default)\n"
-	"	  1 -- binary format\n"
-	"	  2 -- split file format\n"
 	"-o optimizer: set different optimizers\n"
 	"	  0 -- quadratic programm\n"
 	"	  1 -- convex concave procedure (if you choose a transductive SVM,\n"
-    "	       this option will be chosen automatically)\n"
+	"	       this option will be chosen automatically)\n"
+	"-G gap : set gap parameter for universum (default 0.05) \n"
+	"-r coef0 : set coef0 in kernel function (default 0)\n"
+	"-c cost : set the parameter C of C-SVC (default 1)\n"
+	"-C cost : set the parameter C for universum points\n"
+	"-a cost : set the parameter C for balancing constraint\n"
+	"-z cost : set the parameter C for unlabeled points\n"
+	"-m cachesize : set cache memory size in MB (default 256)\n"
+	"-e epsilon : set tolerance of termination criterion (default 0.001)\n"
+	"-s s : s parameter for ramp loss (default: -1 )\n"
+	"-S s : s parameter for transductive SVM loss (default: 0)\n"
+	"\nMODEL OPTIONS:\n"
 	"-t kernel_type : set type of kernel function (default 0)\n"
 	"	  0 -- linear: u'*v\n"
 	"	  1 -- polynomial: (gamma*u'*v + coef0)^degree\n"
@@ -219,20 +241,8 @@ void exit_with_help()
 	"	  4 -- custom: k(x_i,x_j) = X(i,j)\n"
 	"-d degree : set degree in kernel function (default 3)\n"
 	"-g gamma : set gamma in kernel function (default 1/k)\n"
-	"-G gap : set gap parameter for universum (default 0.05) \n"
-	"-r coef0 : set coef0 in kernel function (default 0)\n"
-	"-c cost : set the parameter C of C-SVC (default 1)\n"
-	"-C cost : set the parameter C for universum points\n"
-	"-a cost : set the parameter C for balancing constraint\n"
-	"-z cost : set the parameter C for unlabeled points\n"
-	"-m cachesize : set cache memory size in MB (default 256)\n"
 	"-b bias: use constraint sum alpha_i y_i =0 (default 1=on)\n"
-	"-e epsilon : set tolerance of termination criterion (default 0.001)\n"
-	"-s s : s parameter for ramp loss (default: -1 )\n"
-	"-S s : s parameter for transductive SVM loss (default: 0)\n"
 	"-v n : do cross validation with n folds\n"
-	"-f file : output report file to given destination\n"
-	"-D file : output function values on test set(s) to given destination\n"
 	"-M k : perform a multiclass training on k classes labeled with k different\n"
 		"\tintegers >= 0 (default: 0)\n"
 	);
@@ -330,6 +340,9 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *univ
 			case 'R':
 				seed=atoi(argv[i]);
 				break;
+			case 'F':
+			        strcpy(model_file_name,argv[i]);
+				break;
 			default:
 				fprintf(stderr,"unknown option\n");
 				exit_with_help();
@@ -344,9 +357,9 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *univ
 
 	strcpy(input_file_name, argv[i]);
 
+	/*else
 	if(i<argc-1)
 		strcpy(model_file_name,argv[i+1]);
-	/*else
 	{ TRASH
 		char *p = strrchr(argv[i],'/');
 		if(p==NULL)
@@ -1096,7 +1109,7 @@ void print_model_file(char* model_file_name){
     fprintf(fp2,"\n");
     
   }
-  fprintf(fp2," %g 1:0.0\n",b0);
+  fprintf(fp2,"%g 1:0.0\n",b0);
   fclose(fp2);
   
 }
@@ -1549,7 +1562,10 @@ int main(int argc, char **argv)
     printf("||                                                     ||\n");
     printf("||       UniverSVM                                     ||\n");
     printf("||                                                     ||\n");
-    printf("||       CCCP SVM for large scale transduction         ||\n");
+    printf("||       SVM for large scale transduction with CCCP,   ||\n");
+    printf("||       sparse training with CCCP and induction       ||\n");
+    printf("||       with universum.                               ||\n");
+    printf("||                                                     ||\n");
     printf("||       Version 1.1                                   ||\n");
     printf("||                                                     ||\n");
     printf("==========================================================\n");
