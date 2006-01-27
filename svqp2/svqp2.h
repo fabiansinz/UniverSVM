@@ -1,5 +1,4 @@
 // -*- C++ -*-
-
 /***********************************************************************
  * 
  *  LUSH Lisp Universal Shell
@@ -26,7 +25,7 @@
  ***********************************************************************/
 
 /***********************************************************************
- * $Id: svqp2.h,v 1.3 2005/11/16 03:58:41 agbs Exp $
+ * $Id: svqp2.h,v 1.4 2006/01/27 06:56:13 agbs Exp $
  **********************************************************************/
 
 //////////////////////////////////////
@@ -55,7 +54,6 @@ class SVQP2
 
   
 public:
-  
   // DESTRUCTOR.
   
   virtual ~SVQP2();
@@ -112,7 +110,7 @@ public:
   int      verbosity;
 
   // OPTIONAL INPUTS:
-  // - EPSKT is the tolerance for checking KKT conditions (default 1e-10)
+  // - EPSKT is the tolerance for checking KKT conditions (default 1e-20)
   // - EPSGR is the maximal L0 norm of the gradient on exit (default 1e-3)
   // - MAXST is the maximal conjugate gradient step (default 1e20)
 
@@ -148,13 +146,13 @@ public:
   double  *g ;                  // [l] Gradient
   int     *pivot;		// [n] Pivoting vector
 
-
   // INTERNAL
-
 
 protected:
   int      iter;		// total iterations
   int      l;                   // Active set size
+  double  *xbar ;               // [n] Another x
+  double  *gbar ;               // [n] Gradient at xbar
   long     curcachesize;        // Current cache size
   struct Arow;                  // Cached rows
   Arow   **rows;		// [n] Cached rows
@@ -173,8 +171,9 @@ protected:
   float *getrow(int, int, bool hot=true);
   void   swap(int, int);
   void   unswap(void);
+  void   togbar(int);
   void   shrink(void);
-  void   unshrink(int s);
+  void   unshrink(bool);
   int    iterate_gs1(void);
   int    iterate_gs2(void);
 private:

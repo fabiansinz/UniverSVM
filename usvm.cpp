@@ -121,8 +121,8 @@ double gap=0.05;                  // gap for universum
 double s_ramp = -1;               // parameter for ramp loss
 double s_trans = 0;               // parameter for transductive SVM
 bool s_spec = 0;                  // did the user specify s?
-int verbosity=1;                  // verbosity level, 0=off
-int transduction_only=1;	  // only train tranduction?
+int verbosity=0;                  // verbosity level, 0=off
+
 
 /* Variable to store different parameters of data*/
 double un_weight  = 0.0;           // linear coefficient for the special kernel column
@@ -130,7 +130,7 @@ int mall;           		   // train+test size
 int m=0;                           // training set size
 int m_map[4];                      // map to the training set sizes
 int max_index;                     // maximal index of the training/testing vectors
-
+double maxa=0;						// largest value of alpha
 
 /* Regularizer variables*/
 double C=1;                     // C, penalty on errors
@@ -181,7 +181,6 @@ int use_universum = 0;                   // specifies the training algorithm use
 vector <ID> splits; 
 
 
-
 /* Other */
 int seed=0;
 vector<double> training_time;
@@ -189,52 +188,11 @@ vector<double> training_time;
 
 void exit_with_help()
 {
-	if(transduction_only)
-	{
 	fprintf(stdout,
 	"Usage: usvm [options] training_set_file [model_file]\n"
 	"options:\n"
 	"-T test_set_file: test model on test set\n"
-	"-u unlabeled_data_file : use unlabeled data (transductive SVM).\n"
-	"	     Unlabeled data must have label -3\n"
-	"-B file format : files are stored in the following format:\n"
-	"	  0 -- libsvm ascii format (default)\n"
-	"	  1 -- binary format\n"
-	"	  2 -- split file format\n"
-	"-o optimizer: set different optimizers\n"
-	"	  0 -- quadratic programm\n"
-	"	  1 -- convex concave procedure (if you choose a transductive SVM,\n"
-    "	       this option will be chosen automatically)\n"
-	"-t kernel_type : set type of kernel function (default 0)\n"
-	"	  0 -- linear: u'*v\n"
-	"	  1 -- polynomial: (gamma*u'*v + coef0)^degree\n"
-	"	  2 -- radial basis function: exp(-gamma*|u-v|^2)\n"
-	"	  3 -- sigmoid: tanh(gamma*u'*v + coef0)\n"
-	"	  4 -- custom: k(x_i,x_j) = X(i,j)\n"
-	"-d degree : set degree in kernel function (default 3)\n"
-	"-g gamma : set gamma in kernel function (default 1/k)\n"
-	"-r coef0 : set coef0 in kernel function (default 0)\n"
-	"-c cost : set the parameter C of C-SVC (default 1)\n"
-	"-a cost : set the parameter C for balancing constraint\n"
-	"-z cost : set the parameter C for unlabeled points (default 0.1)\n"
-	"-m cachesize : set cache memory size in MB (default 256)\n"
-	"-b bias: use constraint sum alpha_i y_i =0 (default 1=on)\n"
-	"-e epsilon : set tolerance of termination criterion (default 0.001)\n"
-	"-S s : s parameter for transductive SVM loss (default: 0)\n"
-	"-v n : do cross validation with n folds\n"
-	"-f file : output report file to given destination\n"
-	"-D file : output function values on test set(s) to given destination\n"
-	"-M k : perform a multiclass training on k classes labeled with k different\n"
-		"\tintegers >= 0 (default: 0)\n"
-	);
-	}
-	else
-	{
-	fprintf(stdout,
-	"Usage: usvm [options] training_set_file [model_file]\n"
-	"options:\n"
-	"-T test_set_file: test model on test set\n"
-	"-U universum_file : use universum. Universum point must have label -2\n"
+	"-U universum_file : use universum. Universum points must have label -2\n"
 	"-V universum variant:\n" 
 	"	  0 -- Standard universum training (default)\n"
     "	  1 -- Train SVM with universum by making it a 3-class multiclass\n"
@@ -278,7 +236,6 @@ void exit_with_help()
 	"-M k : perform a multiclass training on k classes labeled with k different\n"
 		"\tintegers >= 0 (default: 0)\n"
 	);
-	}
 	exit(1);
 }
 
@@ -858,18 +815,22 @@ void set_alphas_b0(SVQP2* sv){
     }else{
      alpha.resize(m); // keeps as many alphas as vectors
     }
-    
+
+
     // set all alphas to zero
     for(int i=0;i<(int)alpha.size();i++){ alpha[i]=0;}
     // only training vectors may have non-zero alpha
     for(int i=0;i< sv->n;i++){
        alpha[sv->Aperm[i]]+=sv->x[i]; // fill in learnt svs
+       if(sv->x[i]>maxa) maxa=(sv->x[i]);
+       if(-(sv->x[i])>maxa) maxa=-(sv->x[i]);
     }
     if (optimizer == SVQP){
       b0=(sv->gmin+ sv->gmax)/2.0;
     }
 
 
+	printf("Maximum alpha=%g\n",maxa);
 
 }
 
@@ -877,7 +838,7 @@ void set_alphas_b0(SVQP2* sv){
 
 void setup_standard_svm_problem(SVQP2* sv){
     fill_level = 0;
-    (*sv).verbosity=1;
+    (*sv).verbosity=0;
     (*sv).Afunction=kernel;
     (*sv).Aclosure=(void*) &kparam;
     (*sv).maxcachesize=(long int) 1024*1024*cache_size;
@@ -1173,6 +1134,8 @@ void print_report(vector<double> testerr){
   fprintf(fp2,"o=%i\n",optimizer);
   fprintf(fp2,"optimizer=%s\n",optimizer_table[optimizer]);
 
+  fprintf(fp2,"Max_alpha=%g\n",maxa);
+
   fprintf(fp2,"\n# training times\n");
   for (int i = 0; i !=(int) training_time.size(); ++i){
     fprintf(fp2,"time %i =%g\n",i+1,training_time[i]);
@@ -1211,17 +1174,18 @@ void load_data(char* input_file_name,char* universum_file_name,char* testset_fil
     printf("\n");
 
     //load universum data
-    //printf("Universum: \n");
+    printf("Universum: \n");
     if (universum_file_name[0] != '\0'){
-       load_data_file(universum_file_name);
-       for(int i=m_old;i!=m;++i){
-        Y[i]=-2;
-        data_map[UNIVERSUM].push_back(i);
-       }
+      load_data_file(universum_file_name);
+      for(int i=m_old;i!=m;++i){
+	Y[i]=-2;
+	data_map[UNIVERSUM].push_back(i);
+      }
     }
-	//else  printf("No Universum specified!\n");
+    else  printf("No Universum specified!\n");
     m_old = m;
     printf("\n");
+    
 
     //load test data
     printf("Test Data: \n");
@@ -1252,8 +1216,7 @@ void load_data(char* input_file_name,char* universum_file_name,char* testset_fil
 
     printf("\n");
     printf("\n\nData successfully loaded:\n \tNumber of training examples: %i\n \tNumber of test examples: %i\n",data_map[TRAIN].size(),data_map[TEST].size());
-    printf("\tNumber of unlabeled examples: %i\n\n",data_map[UNLABELED].size()); 
-    //printf("\tNumber of unlabeled examples: %i\n \tNumber of examples in universum: %i\n\n",data_map[UNLABELED].size(),data_map[UNIVERSUM].size()); // uncomment in future version
+    printf("\tNumber of unlabeled examples: %i\n \tNumber of examples in universum: %i\n\n",data_map[UNLABELED].size(),data_map[UNIVERSUM].size()); // uncomment in future version
 }
 /********************************************************************************************/
 
@@ -1321,7 +1284,9 @@ void training(SVQP2* sv){
 	  int numloops=0;
       while ((beta_diff > CCCP_TOL) && numloops<MAX_LOOPS)
 	  {
+	    
 		numloops++;
+		printf("\n---- Loop %d/%d ----\n",numloops,MAX_LOOPS);
 		if (optimizer == CCCP)
 		{
 		    setup_ramp_svm_problem(sv,0);
@@ -1600,7 +1565,13 @@ int main(int argc, char **argv)
     load_data(input_file_name, universum_file_name, testset_file_name,unlabeled_file_name);
     search_for_different_labels(); // check how many different labels we have (universum and unlabeled excluded)
     printf("Data contains %i classes \n\n",labels.size());
-    
+
+
+  for (int i = 0; i != do_multi_class; ++i){
+	      printf(" Training %i  vs. Rest\n",labels[i]);
+  }
+
+
     prob_size =  data_map[TRAIN].size() + data_map[UNIVERSUM].size()*2 + data_map[UNLABELED].size()*2;
     if (data_map[UNLABELED].size() > 0){
 	++prob_size; // last special column for transductive constraint

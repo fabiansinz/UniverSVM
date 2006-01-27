@@ -107,15 +107,14 @@ void fullbin_save(char *fname)
 
 		// write out features for each example
 		for(j=0;j<max_index;j++) buf[j]=0;
-		lasvm_sparsevector_pair_t *p = X[i]->pairs;
-		while (p )
-		{ 
-			if(p->index>max_index)
-			{
-				printf("error! index %d??\n",p->index); exit(1);
-			}
-			 buf[p->index]=p->data;
-			 p = p->next; 	
+		lasvm_sparsevector_pair_t *p;
+		
+		lasvm_sparsevector_foreach(p, X[i]) {
+		  if(p->index>max_index)
+		    {
+		      printf("error! index %d??\n",p->index); exit(1);
+		    }
+		  buf[p->index]=p->value;
 		}
 		f.write((char*)buf,max_index*sizeof(float));
 	}
@@ -140,22 +139,22 @@ void bin_save(char *fname)
 	
 	for(i=0;i<m;i++)
 	{   
-		lasvm_sparsevector_pair_t *p = X[i]->pairs;
-		max_index=0;
-		while (p )
-		{ 
-			 //printf("%d:%g ",p->index,p->data);
-			 buf[max_index]=p->data;
-			 ind[max_index]=p->index;
-			 p = p->next; max_index++;	
-		}
-
-		sz[0]=Y[i];       // write label
-		sz[1]=max_index;  // write length of example (how many nonsparse entries)
-		f.write((char*)sz,2*sizeof(int));
-		f.write((char*)ind,max_index*sizeof(int));   // write indices
-		f.write((char*)buf,max_index*sizeof(float)); // write values
-		if (!f) {printf("File writing error in line %d.\n",i); exit(1);}
+	  lasvm_sparsevector_pair_t *p;
+	  max_index=0;
+	  
+	  lasvm_sparsevector_foreach(p, X[i]) {
+	    //printf("%d:%g ",p->index,p->value);
+	    buf[max_index]=p->value;
+	    ind[max_index]=p->index;
+	    max_index++;	
+	  }
+	  
+	  sz[0]=Y[i];       // write label
+	  sz[1]=max_index;  // write length of example (how many nonsparse entries)
+	  f.write((char*)sz,2*sizeof(int));
+	  f.write((char*)ind,max_index*sizeof(int));   // write indices
+	  f.write((char*)buf,max_index*sizeof(float)); // write values
+	  if (!f) {printf("File writing error in line %d.\n",i); exit(1);}
 	}
 	f.close();
 }
