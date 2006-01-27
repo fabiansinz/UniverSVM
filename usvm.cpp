@@ -121,7 +121,7 @@ double gap=0.05;                  // gap for universum
 double s_ramp = -1;               // parameter for ramp loss
 double s_trans = 0;               // parameter for transductive SVM
 bool s_spec = 0;                  // did the user specify s?
-int verbosity=0;                  // verbosity level, 0=off
+int verbosity=1;                  // verbosity level, 0=off
 
 
 /* Variable to store different parameters of data*/
@@ -192,14 +192,15 @@ void exit_with_help()
 	"Usage: usvm [options] training_set_file\n"
 	"options:\n"
 	"-T test_set_file: test model on test set\n"
-	"-U universum_file : use universum. Universum points must have label -2\n"
+	"-U universum_file : use universum (it's also possible to include universum points \n"
+	"                    with label -2 in the training file)\n"
 	"-V universum variant:\n" 
 	"	  0 -- Standard universum training (default)\n"
-    "	  1 -- Train SVM with universum by making it a 3-class multiclass\n"
+	"	  1 -- Train SVM with universum by making it a 3-class multiclass\n"
 	"	       problem and adding the decision rules for {+1,U} vs. -1 and\n"
 	"	       {-1,U} vs. +1 (0=off default)\n"
 	"	       This switch works only for binary at the moment.\n"
-    "	  2 -- Train universum with ramp loss. This option requires \"-o 1\".\n"
+	"	  2 -- Train universum with ramp loss. This option requires \"-o 1\".\n"
 	"-u unlabeled_data_file : use unlabeled data (transductive SVM).\n"
 	"	     Unlabeled data must have label -3\n"
 	"-B file format : files are stored in the following format:\n"
@@ -225,7 +226,6 @@ void exit_with_help()
 	"-a cost : set the parameter C for balancing constraint\n"
 	"-z cost : set the parameter C for unlabeled points\n"
 	"-m cachesize : set cache memory size in MB (default 256)\n"
-	"-wi weight: set the parameter C of class i to weight*C (default 1)\n"
 	"-b bias: use constraint sum alpha_i y_i =0 (default 1=on)\n"
 	"-e epsilon : set tolerance of termination criterion (default 0.001)\n"
 	"-s s : s parameter for ramp loss (default: -1 )\n"
@@ -838,7 +838,7 @@ void set_alphas_b0(SVQP2* sv){
 
 void setup_standard_svm_problem(SVQP2* sv){
     fill_level = 0;
-    (*sv).verbosity=0;
+    (*sv).verbosity=verbosity;
     (*sv).Afunction=kernel;
     (*sv).Aclosure=(void*) &kparam;
     (*sv).maxcachesize=(long int) 1024*1024*cache_size;
