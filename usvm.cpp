@@ -346,15 +346,15 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *univ
 
 	if(i<argc-1)
 		strcpy(model_file_name,argv[i+1]);
-	else
-	{
+	/*else
+	{ TRASH
 		char *p = strrchr(argv[i],'/');
 		if(p==NULL)
 			p = argv[i];
 		else
 			++p;
 		sprintf(model_file_name,"%s.model",p);
-	}
+		} TRASH END */
 
 }
 
@@ -830,8 +830,8 @@ void set_alphas_b0(SVQP2* sv){
     }
 
 
-	printf("Maximum alpha=%g\n",maxa);
-
+    printf("Maximum alpha=%g\n",maxa);
+	
 }
 
 /************************* preprocessing routines*********************************************/
@@ -1081,6 +1081,24 @@ void print_fvals(char* fval_file_name){
       fprintf(fp2,"];\n");
   }
   fclose(fp2);
+}
+
+void print_model_file(char* model_file_name){
+  FILE *fp2;
+  fp2 = fopen(model_file_name,"w");
+  for(int i=0;i<m;++i){
+    if (alpha[i]==0) continue;
+    fprintf(fp2,"%g ",alpha[i]);
+    lasvm_sparsevector_pair_t *p;
+    for(p=X[i]->pairs; p->index>=0; p++) {
+      fprintf(fp2," %d:%.8g ", p->index, p->value);
+    }
+    fprintf(fp2,"\n");
+    
+  }
+  fprintf(fp2," %g 1:0.0\n",b0);
+  fclose(fp2);
+  
 }
 
 
@@ -1532,7 +1550,7 @@ int main(int argc, char **argv)
     printf("||       UniverSVM                                     ||\n");
     printf("||                                                     ||\n");
     printf("||       CCCP SVM for large scale transduction         ||\n");
-    printf("||       Version 1.0                                   ||\n");
+    printf("||       Version 1.1                                   ||\n");
     printf("||                                                     ||\n");
     printf("==========================================================\n");
 
@@ -1716,6 +1734,10 @@ int main(int argc, char **argv)
 
     if (fval_file_name[0] != '\0'){
        print_fvals(fval_file_name);
+    }  
+
+    if (model_file_name[0] != '\0'){
+       print_model_file(model_file_name);
     }  
  
  	
