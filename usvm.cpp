@@ -53,16 +53,17 @@ char *optimizer_table[] = {"svqp2","cccp"};
 #define ONLINE_WITH_FINISHING 2 
 #define VERYBIG pow(10.0,100)
 #define CCCP_TOL 0.0
-
 #define TRAIN 0
 #define TEST  1
 #define UNIVERSUM 2
 #define UNLABELED 3
+#define SV 4
 
 #define TRAINSAMP 0
 #define UNIVESAMP 1
 #define UNLABSAMP 2
 #define EXTRASAMP 4
+
 
 #define MAX_LOOPS 20 // maximum number of loops for tsvm training, should converge before this value, anyway..
 
@@ -128,7 +129,7 @@ int verbosity=1;                  // verbosity level, 0=off
 double un_weight  = 0.0;           // linear coefficient for the special kernel column
 int mall;           		   // train+test size
 int m=0;                           // training set size
-int m_map[4];                      // map to the training set sizes
+int m_map[5];                      // map to the training set sizes
 int max_index;                     // maximal index of the training/testing vectors
 double maxa=0;						// largest value of alpha
 
@@ -144,7 +145,7 @@ vector <int>  Y;                  // labels
 vector < vector <int> >  multi_Y; // labels for multiclass
 vector <double> kparam;           // kernel parameters
 vector <double> x_square;         // norms of input vectors, used for RBF
-vector <int> data_map[4];         // maps to the indices of train/test/... data
+vector <int> data_map[5];         // maps to the indices of train/test/... data
 vector <double> global_ext_K;     // additional kernel column for transduction
 vector <int> labels;              // all different labels, that occured in the datafiles
 
@@ -179,17 +180,29 @@ long long kcalcs=0;                      // number of kernel evaluations
 int binary_files=0;
 int use_universum = 0;                   // specifies the training algorithm used for universum
 vector <ID> splits; 
-
+bool justtest = 0;                       // if justtest, then universvm tests on the specified model
 
 /* Other */
 int seed=0;
 vector<double> training_time;
 ///****************************** Functions *************************************/
 
+
 void exit_with_help()
 {
 	fprintf(stdout,
-	"\nUSAGE: usvm [options] training_set_file\n\n"
+	"\nUSAGE: usvm [options] training_set_file [model_file]\n\n"
+	"\n"
+	"Trains a SVM, TSVM or USVM with specified parameters. If a model_file is\n"
+	"specified after the training_set_file, then the learnt model will be stored\n"
+	"there. If the model_file is supplied by the switch -F, then UniverSVM will\n"
+	"test the specified model on the data that is supplied as training data and \n"
+	"the test data supplied by -T. So\n"
+	"   universvm [options] -T testfile trainfile\n"
+	"has the same effect as doing\n"
+	"   universvm [options] trainfile model \n"
+	"   universvm [options] -F model testfile\n"
+	"\n"
 	"OPTIONS:\n"
 	"FILE/DATA OPTIONS:\n"
 	"-T test_set_file: test model on test set\n"
@@ -250,6 +263,7 @@ void exit_with_help()
 }
 
 
+// ******************* Parse Functions **************************************
 void parse_command_line(int argc, char **argv, char *input_file_name, char *universum_file_name, char *testset_file_name, char *unlabeled_file_name,  char *model_file_name, char *fval_file_name)
 {
     int i; 
@@ -342,6 +356,7 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *univ
 				break;
 			case 'F':
 			        strcpy(model_file_name,argv[i]);
+				justtest = 1;
 				break;
 			default:
 				fprintf(stderr,"unknown option\n");
@@ -357,10 +372,12 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *univ
 
 	strcpy(input_file_name, argv[i]);
 
-	/*else
-	if(i<argc-1)
-		strcpy(model_file_name,argv[i+1]);
-	{ TRASH
+	
+	if(i<argc-1){
+	  strcpy(model_file_name,argv[i+1]);
+	}
+	
+	/*{ TRASH
 		char *p = strrchr(argv[i],'/');
 		if(p==NULL)
 			p = argv[i];
@@ -643,8 +660,9 @@ void load_data_file(char *filename)
     if(kernel_type==RBF)
     {
         x_square.resize(m+msz);
-        for(i=0;i<msz;i++)
+        for(i=0;i<msz;i++){
             x_square[i+m]=lasvm_sparsevector_dot_product(X[i+m],X[i+m]);
+	}
     }
 
     if(kgamma==-1)
@@ -672,7 +690,263 @@ int sample_type(int i){
 }
 
 
+void load_data(char* input_file_name,char* universum_file_name,char* testset_file_name,char* unlabeled_file_name){
 
+    printf("Loading data...\n\n");
+    //load training data
+    int m_old = 0;
+
+    printf("Training data: \n");
+    load_data_file(input_file_name);
+	printf("Done!\n");
+
+    // check, if data contains universum/unlabeled points 
+    for (int i = m_old; i != m;++i){
+      if (Y[i] >= -1) data_map[TRAIN].push_back(i);
+      else if (Y[i] == -2) data_map[UNIVERSUM].push_back(i); // universum has -2 
+      else if (Y[i] == -3) data_map[UNLABELED].push_back(i);  // unlabeled has -3
+    }
+    m_old = m;
+    printf("\n");
+
+    //load universum data
+    printf("Universum: \n");
+    if (universum_file_name[0] != '\0'){
+      load_data_file(universum_file_name);
+      for(int i=m_old;i!=m;++i){
+	Y[i]=-2;
+	data_map[UNIVERSUM].push_back(i);
+      }
+    }
+    else  printf("No Universum specified!\n");
+    m_old = m;
+    printf("\n");
+    
+
+    //load test data
+    printf("Test Data: \n");
+    if (testset_file_name[0] != '\0'){
+       load_data_file(testset_file_name);
+	   printf("Done!\n");
+       for(int i=m_old;i!=m;++i){
+        data_map[TEST].push_back(i);
+       }
+    }else  printf("No test set specified!\n");
+    m_old = m;
+    printf("\n");
+
+
+
+    printf("Unlabeled Data: \n");
+    if (unlabeled_file_name[0] != '\0'){
+       load_data_file(unlabeled_file_name);
+ 	   printf("Done!\n");
+       for(int i=m_old;i != m;++i){
+        Y[i] =-3;
+        data_map[UNLABELED].push_back(i);
+       }
+    }else  printf("No unlabeled data specified!\n");
+
+    // if C for unlabeled = 0, it should not use it
+    if (C3 == 0.0) data_map[UNLABELED].resize(0); // KEEP?
+
+    printf("\n");
+    printf("\n\nData successfully loaded:\n \tNumber of training examples: %i\n \tNumber of test examples: %i\n",data_map[TRAIN].size(),data_map[TEST].size());
+    printf("\tNumber of unlabeled examples: %i\n \tNumber of examples in universum: %i\n\n",data_map[UNLABELED].size(),data_map[UNIVERSUM].size()); // uncomment in future version
+}
+
+
+
+void load_model_param(const char *model_file_name){
+	FILE *fp = fopen(model_file_name,"rb");
+	if(fp==NULL){
+	  fprintf(stderr,"Model file does not exist!\n");
+	  exit(1);
+	}
+	double alpha0 = 0.0;
+	int num_sv = 0;
+	// read parameters
+	char cmd[81];
+	while(1)
+	{
+		fscanf(fp,"%80s",cmd);
+
+		if(strcmp(cmd,"b0")==0){
+		  fscanf(fp,"%lf",&b0);
+		  printf("\tb0: %g\n",b0);
+		}else if(strcmp(cmd,"kernel_type")==0){		
+		  fscanf(fp,"%80s",cmd);
+		  int i = 0;
+		  for(i=0;kernel_type_table[i];++i){
+		    if(strcmp(kernel_type_table[i],cmd)==0){
+		      kernel_type=i;
+		      break;
+		    }
+		  }
+		  if (i == sizeof(kernel_type_table)){
+		    fprintf(stderr,"kernel_type not know\n"); exit(1);
+		  }else{
+		    printf("\tkernel_type: %s\n",kernel_type_table[kernel_type]);
+		  }
+		  
+			
+		}else if(strcmp(cmd,"degree")==0){
+		  fscanf(fp,"%lf",&degree);
+		  printf("\tdegree: %g\n",degree);
+		}else if(strcmp(cmd,"kgamma")==0){
+		  fscanf(fp,"%lf",&kgamma);
+		  printf("\tkgamma: %g\n",kgamma);
+		}else if(strcmp(cmd,"coef0")==0){
+			fscanf(fp,"%lf",&coef0);
+			printf("\tcoef0: %g\n",coef0);
+		}else if(strcmp(cmd,"alpha0")==0){
+			fscanf(fp,"%lf",&alpha0);
+			printf("\talpha0: %g\n",alpha0);
+		}else if(strcmp(cmd,"total_sv")==0){
+			fscanf(fp,"%d",&num_sv);
+			printf("\tNumber of SVs: %d\n",num_sv);
+		}else if(strcmp(cmd,"SV")==0){
+		  while(1){
+		      int c = getc(fp);
+		      if(c==EOF || c=='\n') break;	
+		  }
+		  break;
+		}else{
+		  fprintf(stderr,"unknown text in model file\n");
+		  exit(1);
+		}
+	  }
+	fclose(fp);
+}
+
+
+
+
+int load_model(const char *model_file_name)
+{
+	FILE *fp = fopen(model_file_name,"rb");
+	if(fp==NULL){
+	  fprintf(stderr,"Model file does not exist!\n");
+	  exit(1);
+	}
+	double alpha0 = 0.0;
+	int num_sv = 0;
+	// read parameters
+	char cmd[81];
+	while(1)
+	{
+		fscanf(fp,"%80s",cmd);
+
+		if(strcmp(cmd,"b0")==0){
+		  fscanf(fp,"%lf",&b0);
+		  printf("\tb0: %g\n",b0);
+		}else if(strcmp(cmd,"kernel_type")==0){		
+		  fscanf(fp,"%80s",cmd);
+		  int i = 0;
+		  for(i=0;kernel_type_table[i];++i){
+		    if(strcmp(kernel_type_table[i],cmd)==0){
+		      kernel_type=i;
+		      break;
+		    }
+		  }
+		  if (i == sizeof(kernel_type_table)){
+		    fprintf(stderr,"kernel_type not know\n"); exit(1);
+		  }else{
+		    printf("\tkernel_type: %s\n",kernel_type_table[kernel_type]);
+		  }
+		  
+			
+		}else if(strcmp(cmd,"degree")==0){
+		  fscanf(fp,"%lf",&degree);
+		  printf("\tdegree: %g\n",degree);
+		}else if(strcmp(cmd,"kgamma")==0){
+		  fscanf(fp,"%lf",&kgamma);
+		  printf("\tkgamma: %g\n",kgamma);
+		}else if(strcmp(cmd,"coef0")==0){
+			fscanf(fp,"%lf",&coef0);
+			printf("\tcoef0: %g\n",coef0);
+		}else if(strcmp(cmd,"alpha0")==0){
+			fscanf(fp,"%lf",&alpha0);
+			printf("\talpha0: %g\n",alpha0);
+		}else if(strcmp(cmd,"total_sv")==0){
+			fscanf(fp,"%d",&num_sv);
+			printf("\tNumber of SVs: %d\n",num_sv);
+		}else if(strcmp(cmd,"SV")==0){
+		  while(1){
+		      int c = getc(fp);
+		      if(c==EOF || c=='\n') break;	
+		  }
+		  break;
+		}else{
+		  fprintf(stderr,"unknown text in model file\n");
+		  exit(1);
+		}
+	  }
+
+	// read sv_coef and SV
+
+	int index; double value;
+	int elements = 0;
+	int msz = 0; int i =0;
+	long pos = ftell(fp);
+	lasvm_sparsevector_t* v;
+	elements = 0;
+	while(1){
+	  int c = fgetc(fp);
+	  switch(c){
+	  case '\n':
+	    v=lasvm_sparsevector_create();
+	    X.push_back(v); 
+            ++msz;
+            elements=0;
+            break;
+        case ':':
+            ++elements;
+            break;
+        case EOF:
+            goto out;
+        default:
+            ;
+        }
+    }
+ out:
+    fseek(fp,pos,SEEK_SET);
+    max_index = 0;
+    for(i=0;i<msz;i++){
+      double tmp_alpha;
+      fscanf(fp,"%lf",&tmp_alpha);
+      alpha.push_back(tmp_alpha);
+      while(1){
+	int c;
+	do {
+	  c = getc(fp);
+	      if(c=='\n') goto out2;
+	} while(isspace(c));
+	ungetc(c,fp);
+	fscanf(fp,"%d:%lf",&index,&value);
+	lasvm_sparsevector_set(X[m+i],index,value);
+	if (index>max_index) max_index=index;
+      }
+out2:
+      if (tmp_alpha != 0) 
+	data_map[SV].push_back(m+i);
+      else
+	data_map[UNLABELED].push_back(m+i);
+      //tmp_alpha=1.0; // dummy
+    }
+    
+    fclose(fp);
+    if (data_map[UNLABELED].size() > 0) alpha.push_back(alpha0);
+    msz=X.size()-m;
+    printf("examples: %d   features: %d\n",msz,max_index);
+    printf("|SV|: %d   |unlabeled|: %d\n",data_map[SV].size(),data_map[UNLABELED].size());
+    return msz;
+   
+
+}
+
+
+//******************* Kernel functions ***********************
 
 double kernel(int i, int j, void *kparam)
 {
@@ -683,7 +957,6 @@ double kernel(int i, int j, void *kparam)
   }
 
   dot=lasvm_sparsevector_dot_product(X[i],X[j]);
-
   // sparse, linear kernel
   switch(kernel_type)
   {
@@ -702,6 +975,32 @@ double kernel(int i, int j, void *kparam)
   return dot;
 }
 
+
+void compute_extra_K(){
+	printf("Computing kernel values for extra column ...");
+	global_ext_K.resize(X.size()+1);
+
+
+	for (int i = 0; i !=(int) X.size()+1; ++i) global_ext_K[i] = 0.0; // initialize with zero
+	
+	if (C_star == 0.0 and !justtest){
+	    printf(" [OK]\n");
+	    return; // if the alpha for balancing is set to 0, there's nothing to do
+     	}
+	for (int i = 0; i !=(int) X.size(); ++i){
+	    for (int j = 0; j != (int) data_map[UNLABELED].size(); ++j){
+		global_ext_K[i] += kernel(i,data_map[UNLABELED][j],NULL);
+	    }
+	    global_ext_K[i] /= (double)data_map[UNLABELED].size();
+	}
+
+
+	for (int i = 0; i !=(int) data_map[UNLABELED].size(); ++i){
+		global_ext_K[X.size()] += global_ext_K[data_map[UNLABELED][i]];
+	}
+	global_ext_K[X.size()] /= (double)data_map[UNLABELED].size();
+	printf(" [OK]\n");
+}
 
 
 
@@ -1081,7 +1380,7 @@ void reset_alphas(SVQP2* sv){
     }
 }
 
-/********************************************************************************************/
+/********************************** Saving Functions ************************************/
 
 void print_fvals(char* fval_file_name){
   FILE *fp2;
@@ -1099,17 +1398,42 @@ void print_fvals(char* fval_file_name){
 void print_model_file(char* model_file_name){
   FILE *fp2;
   fp2 = fopen(model_file_name,"w");
+
+  fprintf(fp2,"b0 %g\n",b0);
+  fprintf(fp2,"kernel_type %s\n",kernel_type_table[kernel_type]);
+  fprintf(fp2,"kgamma %.15g\n",kgamma);
+  fprintf(fp2,"degree %g\n",degree);
+  fprintf(fp2,"coef0 %g\n",coef0);
+  if (alpha.size() == m+1)// write out balancing constraint alpha
+    fprintf(fp2,"alpha0 %.15g\n",alpha[m]);
+  int num_sv = 0;
+  for(int i=0;i<m;++i){
+    if (alpha[i]!=0) ++num_sv;
+  }    
+  fprintf(fp2,"total_sv %d\n",num_sv);
+  fprintf(fp2,"SV\n");
+  // write out SVs
   for(int i=0;i<m;++i){
     if (alpha[i]==0) continue;
-    fprintf(fp2,"%g ",alpha[i]);
+    fprintf(fp2,"%.15g ",alpha[i]);
     lasvm_sparsevector_pair_t *p;
     for(p=X[i]->pairs; p->index>=0; p++) {
+      fprintf(fp2," %d:%.15g ", p->index, p->value);
+    }
+    fprintf(fp2,"\n");
+    
+  }
+  // write out unlabeled data
+  for(int i=0;i<data_map[UNLABELED].size();++i){
+    fprintf(fp2,"0 ");
+    lasvm_sparsevector_pair_t *p;
+    for(p=X[data_map[UNLABELED][i]]->pairs; p->index>=0; p++) {
       fprintf(fp2," %d:%.8g ", p->index, p->value);
     }
     fprintf(fp2,"\n");
     
   }
-  fprintf(fp2,"%g 1:0.0\n",b0);
+
   fclose(fp2);
   
 }
@@ -1185,70 +1509,6 @@ void print_report(vector<double> testerr){
 }
 
 
-void load_data(char* input_file_name,char* universum_file_name,char* testset_file_name,char* unlabeled_file_name){
-
-    printf("Loading data...\n\n");
-    //load training data
-    int m_old = 0;
-
-    printf("Training data: \n");
-    load_data_file(input_file_name);
-	printf("Done!\n");
-
-    // check, if data contains universum/unlabeled points 
-    for (int i = m_old; i != m;++i){
-      if (Y[i] >= -1) data_map[TRAIN].push_back(i);
-      else if (Y[i] == -2) data_map[UNIVERSUM].push_back(i); // universum has -2 
-      else if (Y[i] == -3) data_map[UNLABELED].push_back(i);  // unlabeled has -3
-    }
-    m_old = m;
-    printf("\n");
-
-    //load universum data
-    printf("Universum: \n");
-    if (universum_file_name[0] != '\0'){
-      load_data_file(universum_file_name);
-      for(int i=m_old;i!=m;++i){
-	Y[i]=-2;
-	data_map[UNIVERSUM].push_back(i);
-      }
-    }
-    else  printf("No Universum specified!\n");
-    m_old = m;
-    printf("\n");
-    
-
-    //load test data
-    printf("Test Data: \n");
-    if (testset_file_name[0] != '\0'){
-       load_data_file(testset_file_name);
-	   printf("Done!\n");
-       for(int i=m_old;i!=m;++i){
-        data_map[TEST].push_back(i);
-       }
-    }else  printf("No test set specified!\n");
-    m_old = m;
-    printf("\n");
-
-
-
-    printf("Unlabeled Data: \n");
-    if (unlabeled_file_name[0] != '\0'){
-       load_data_file(unlabeled_file_name);
- 	   printf("Done!\n");
-       for(int i=m_old;i != m;++i){
-        Y[i] =-3;
-        data_map[UNLABELED].push_back(i);
-       }
-    }else  printf("No unlabeled data specified!\n");
-
-    // if C for unlabeled = 0, it should not use it
-    if (C3 == 0.0) data_map[UNLABELED].resize(0); // KEEP?
-
-    printf("\n");
-    printf("\n\nData successfully loaded:\n \tNumber of training examples: %i\n \tNumber of test examples: %i\n",data_map[TRAIN].size(),data_map[TEST].size());
-    printf("\tNumber of unlabeled examples: %i\n \tNumber of examples in universum: %i\n\n",data_map[UNLABELED].size(),data_map[UNIVERSUM].size()); // uncomment in future version
-}
 /********************************************************************************************/
 
 
@@ -1529,31 +1789,6 @@ void setup_folds(vector <  vector <int> >* a, vector <  vector <int> >* b){
   
 }
 
-void compute_extra_K(){
-	printf("Computing kernel values for extra column ...");
-	global_ext_K.resize(X.size()+1);
-
-	for (int i = 0; i !=(int) X.size()+1; ++i) global_ext_K[i] = 0.0; // initialize with zero
-	
-	if (C_star == 0.0){
-	    printf(" [OK]\n");
-	    return; // if the alpha for balancing is set to 0, there's nothing to do
-     	}
-	for (int i = 0; i !=(int) X.size(); ++i){
-	    for (int j = 0; j != (int) data_map[UNLABELED].size(); ++j){
-		global_ext_K[i] += kernel(i,data_map[UNLABELED][j],NULL);
-	    }
-	    global_ext_K[i] /= (double)data_map[UNLABELED].size();
-	}
-
-
-	for (int i = 0; i !=(int) data_map[UNLABELED].size(); ++i){
-		global_ext_K[X.size()] += global_ext_K[data_map[UNLABELED][i]];
-	}
-	global_ext_K[X.size()] /= (double)data_map[UNLABELED].size();
-	printf(" [OK]\n");
-}
-
 
 /*******************************************************************************************/
 int main(int argc, char **argv)
@@ -1581,6 +1816,8 @@ int main(int argc, char **argv)
     int training_set_size = 0; // remember training set size for special universum training
 
     parse_command_line(argc, argv, input_file_name, universum_file_name, testset_file_name,unlabeled_file_name,model_file_name, fval_file_name);
+    // overwrite parameter configureation with the stored one
+    if (justtest) load_model_param(model_file_name);
 
     /** Catch some errors **/
     if (use_universum == MULTIUNI && do_multi_class){
@@ -1590,52 +1827,53 @@ int main(int argc, char **argv)
     }
     /**------------------**/
 
-
     printf("---------------------------------\n");
     printf("         Initalization   \n");
     printf("---------------------------------\n");
-   
+    
     if(split_file_name[0]!='\0') split_file_load(split_file_name);
     load_data(input_file_name, universum_file_name, testset_file_name,unlabeled_file_name);
     search_for_different_labels(); // check how many different labels we have (universum and unlabeled excluded)
     printf("Data contains %i classes \n\n",labels.size());
+      
+    if (!justtest){// if we train a model
 
-
-  for (int i = 0; i != do_multi_class; ++i){
-	      printf(" Training %i  vs. Rest\n",labels[i]);
-  }
-
-
-    prob_size =  data_map[TRAIN].size() + data_map[UNIVERSUM].size()*2 + data_map[UNLABELED].size()*2;
-    if (data_map[UNLABELED].size() > 0){
+      
+      for (int i = 0; i != do_multi_class; ++i){
+	printf(" Training %i  vs. Rest\n",labels[i]);
+      }
+      
+      
+      prob_size =  data_map[TRAIN].size() + data_map[UNIVERSUM].size()*2 + data_map[UNLABELED].size()*2;
+      if (data_map[UNLABELED].size() > 0){
 	++prob_size; // last special column for transductive constraint
 	compute_extra_K();      // setup extended column
-    }
-
-
-    // train
-    SVQP2* sv = new SVQP2(prob_size);
-
-    // catch special training switch for universum
-    if (use_universum == MULTIUNI){
+      }
+      
+      
+      // train
+      SVQP2* sv = new SVQP2(prob_size);
+      
+      // catch special training switch for universum
+      if (use_universum == MULTIUNI){
 	printf("Setting up labels for multiclass universum training ... ");
 	training_set_size = data_map[TRAIN].size();
 	prob_size -=  data_map[UNIVERSUM].size();
     	int newLab = max(labels[0],labels[1])+1;
 	labels.push_back(newLab);
 	for (int i = 0; i !=(int) data_map[UNIVERSUM].size();++i){
-	    data_map[TRAIN].push_back(data_map[UNIVERSUM][i]);
-	    Y[data_map[UNIVERSUM][i]] = newLab;
+	  data_map[TRAIN].push_back(data_map[UNIVERSUM][i]);
+	  Y[data_map[UNIVERSUM][i]] = newLab;
 	}
 	data_map[UNIVERSUM].resize(0);
 	do_multi_class = 3;
 	printf("  [OK]\n");
-    }
-
-    sv = new SVQP2(prob_size);
-    
-    if (folds == -1){ // no cv
-      if (do_multi_class == 0){ 
+      }
+      
+      sv = new SVQP2(prob_size);
+      
+      if (folds == -1){ // no cv
+	if (do_multi_class == 0){ 
 	  printf("---------------------------------\n");
 	  printf("           Training        \n");
 	  printf("---------------------------------\n");
@@ -1648,62 +1886,62 @@ int main(int argc, char **argv)
 	  printf("           Testing        \n");
 	  printf("---------------------------------\n");
 	  if (data_map[TEST].size() > 0){
-	      printf("Testing on test set with %i examples:\n",data_map[TEST].size());
-	      accus.push_back(test_current_model(model_file_name));
+	    printf("Testing on test set with %i examples:\n",data_map[TEST].size());
+	    accus.push_back(test_current_model(model_file_name));
 	  }else{
-
-	      printf("Testing on training set with %i examples:\n",data_map[TRAIN].size());
-	      data_map[TEST] = data_map[TRAIN];
-	      accus.push_back(test_current_model(model_file_name));
-	      ///test_current_model(model_file_name);
+	    
+	    printf("Testing on training set with %i examples:\n",data_map[TRAIN].size());
+	    data_map[TEST] = data_map[TRAIN];
+	    accus.push_back(test_current_model(model_file_name));
+	    ///test_current_model(model_file_name);
 	  }
 	  delete sv;
-
-      }else{
-      ///////////////// Start multi_class ///////////////////////////////
+	  
+	}else{
+	  ///////////////// Start multi_class ///////////////////////////////
 	  multi_alpha.resize(do_multi_class);
 	  setup_labels_for_multiclass();
 	  if (use_universum == MULTIUNI) --do_multi_class;
 	  
-
+	  
 	  multi_class_training();
-
+	  
 	  printf("---------------------------------\n");
 	  printf("           Testing        \n");
 	  printf("---------------------------------\n");
 	  if (data_map[TEST].size() > 0){
-	      printf("Testing on test set with %i examples:\n",data_map[TEST].size());
+	    printf("Testing on test set with %i examples:\n",data_map[TEST].size());
 	  }else{
-	      if (use_universum == MULTIUNI) data_map[TRAIN].resize(training_set_size);
-	      printf("Testing on training set with %i examples:\n",data_map[TRAIN].size());
-	      data_map[TEST] = data_map[TRAIN];
+	    if (use_universum == MULTIUNI) data_map[TRAIN].resize(training_set_size);
+	    printf("Testing on training set with %i examples:\n",data_map[TRAIN].size());
+	    data_map[TEST] = data_map[TRAIN];
 	  }
 	  accus.push_back(test_current_multi_class_model(model_file_name));
-      }
-      ///////////////// End multi_class ///////////////////////////////
-
-    }else{
-      vector < vector <int> > trainfold, testfold;
-      setup_folds(&trainfold, &testfold);
-      double meanacc = 0.0;
-      double foldacc;
-      if (do_multi_class > 0) setup_labels_for_multiclass();
-
-      for (int fold = 0; fold != folds; ++fold){
-        
-        data_map[TRAIN] = trainfold[fold];
-        data_map[TEST] = testfold[fold];
-
-        prob_size =  data_map[TRAIN].size() + data_map[UNIVERSUM].size()*2 + data_map[UNLABELED].size()*2;
-        if (data_map[UNLABELED].size() > 0) ++prob_size; // last special column for transductive constraint
-
-	printf("---------------------------------\n");
-	printf(" Training fold (%i/%i)\n",fold+1,folds);
-	printf(" Overall size of training set: %i\n",prob_size);
-	printf("---------------------------------\n");
-
-        
-	if (do_multi_class == 0){
+	}
+	///////////////// End multi_class ///////////////////////////////
+	
+      }else{
+	vector < vector <int> > trainfold, testfold;
+	setup_folds(&trainfold, &testfold);
+	double meanacc = 0.0;
+	double foldacc;
+	if (do_multi_class > 0) setup_labels_for_multiclass();
+	
+	for (int fold = 0; fold != folds; ++fold){
+	  
+	  data_map[TRAIN] = trainfold[fold];
+	  data_map[TEST] = testfold[fold];
+	  
+	  prob_size =  data_map[TRAIN].size() + data_map[UNIVERSUM].size()*2 + data_map[UNLABELED].size()*2;
+	  if (data_map[UNLABELED].size() > 0) ++prob_size; // last special column for transductive constraint
+	  
+	  printf("---------------------------------\n");
+	  printf(" Training fold (%i/%i)\n",fold+1,folds);
+	  printf(" Overall size of training set: %i\n",prob_size);
+	  printf("---------------------------------\n");
+	  
+	  
+	  if (do_multi_class == 0){
 	    SVQP2* sv = new SVQP2(prob_size);
 	    setup_problem(sv);
 	    training(sv);
@@ -1713,48 +1951,73 @@ int main(int argc, char **argv)
 	    meanacc +=  foldacc;
 	    accus.push_back(foldacc);
 	    delete sv;
-	}else{
-	  multi_alpha.resize(do_multi_class);
-
-	  multi_class_training();
-
-	  printf("---------------------------------\n");
-	  printf("           Testing        \n");
-	  printf("---------------------------------\n");
-	  if (data_map[TEST].size() > 0){
-	      printf("Testing on test set with %i examples:\n",data_map[TEST].size());
 	  }else{
+	    multi_alpha.resize(do_multi_class);
+	    
+	    multi_class_training();
+	    
+("---------------------------------\n");
+	    printf("           Testing        \n");
+	    printf("---------------------------------\n");
+	    if (data_map[TEST].size() > 0){
+	      printf("Testing on test set with %i examples:\n",data_map[TEST].size());
+	    }else{
 	      printf("Testing on training set with %i examples:\n",data_map[TRAIN].size());
 	      data_map[TEST].resize(0);
 	      for (int i = 0; i !=(int) data_map[TRAIN].size(); ++i) 
-		  data_map[TEST].push_back(data_map[TRAIN][i]);
+		data_map[TEST].push_back(data_map[TRAIN][i]);
+	    }
+	    foldacc = test_current_multi_class_model(model_file_name);
+	    meanacc +=  foldacc;
+	    accus.push_back(foldacc);
 	  }
-	  foldacc = test_current_multi_class_model(model_file_name);
-	  meanacc +=  foldacc;
-	  accus.push_back(foldacc);
+	  
 	}
-
+	meanacc /= double(folds);
+	accus.push_back(meanacc);
+	
+	
+	printf("===========================================\n");
+	printf("\nMean Cross Validation Accuracy: %g\n", meanacc);
+	printf("===========================================\n");
       }
-      meanacc /= double(folds);
-      accus.push_back(meanacc);
       
+      if (report_file_name[0] != '\0'){
+	print_report(accus);
+      }  
+      
+      
+      if (model_file_name[0] != '\0'){
+	print_model_file(model_file_name);
+      }  
+    }else{
+	printf("Loading model file...\n");
+	alpha.resize(0);
+	for (int i = 0; i != m; ++i) alpha.push_back(0.0); // set all alpha's of nonSV to zero
+	data_map[SV].resize(0); data_map[UNLABELED].resize(0);
+	int msz = load_model(model_file_name);
 
-      printf("===========================================\n");
-      printf("\nMean Cross Validation Accuracy: %g\n", meanacc);
-      printf("===========================================\n");
+	if(kernel_type==RBF){
+	  x_square.resize(m+msz);
+	  for(int i=0;i<msz;i++){
+            x_square[i+m]=lasvm_sparsevector_dot_product(X[i+m],X[i+m]);
+	  }
+	}
+	m+=msz;
+	if (data_map[UNLABELED].size() > 0){
+	  use_ext_K = 1;
+	  compute_extra_K();
+	}
+	// we are testing on the data sepcified with -T and training
+	for (int i = 0; i != data_map[TRAIN].size(); ++i){
+	  data_map[TEST].push_back(data_map[TRAIN][i]);
+	}
+	test_current_model(model_file_name);
     }
 
-    if (report_file_name[0] != '\0'){
-       print_report(accus);
-    }  
 
     if (fval_file_name[0] != '\0'){
-       print_fvals(fval_file_name);
+      print_fvals(fval_file_name);
     }  
-
-    if (model_file_name[0] != '\0'){
-       print_model_file(model_file_name);
-    }  
- 
- 	
+    return 0;
 }
