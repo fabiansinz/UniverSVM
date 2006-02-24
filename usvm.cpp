@@ -1137,7 +1137,7 @@ void set_alphas_b0(SVQP2* sv){
     }
 
 
-    printf("Maximum alpha=%g\n",maxa);
+    //printf("Maximum alpha=%g\n",maxa);
 	
 }
 
