@@ -789,6 +789,9 @@ void load_model_param(const char *model_file_name){
 		  }
 		  
 			
+		}else if(strcmp(cmd,"ker_ridge")==0){
+		  fscanf(fp,"%lg",&ker_ridge);
+		  printf("\tker_ridge: %g\n",ker_ridge);
 		}else if(strcmp(cmd,"degree")==0){
 		  fscanf(fp,"%lf",&degree);
 		  printf("\tdegree: %g\n",degree);
@@ -855,6 +858,9 @@ int load_model(const char *model_file_name)
 		  }
 		  
 			
+		}else if(strcmp(cmd,"ker_ridge")==0){
+		  fscanf(fp,"%lg",&ker_ridge);
+		  printf("\tker_ridge: %g\n",ker_ridge);
 		}else if(strcmp(cmd,"degree")==0){
 		  fscanf(fp,"%lf",&degree);
 		  printf("\tdegree: %g\n",degree);
@@ -1417,6 +1423,7 @@ void print_model_file(char* model_file_name){
 
   fprintf(fp2,"b0 %g\n",b0);
   fprintf(fp2,"kernel_type %s\n",kernel_type_table[kernel_type]);
+  fprintf(fp2,"ker_ridge %i\n",ker_ridge);
   fprintf(fp2,"kgamma %.15g\n",kgamma);
   fprintf(fp2,"degree %g\n",degree);
   fprintf(fp2,"coef0 %g\n",coef0);
