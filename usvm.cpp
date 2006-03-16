@@ -790,8 +790,8 @@ void load_model_param(const char *model_file_name){
 		  
 			
 		}else if(strcmp(cmd,"ker_ridge")==0){
-		  fscanf(fp,"%lg",&ker_ridge);
-		  printf("\tker_ridge: %g\n",ker_ridge);
+		  fscanf(fp,"%d",&ker_ridge);
+		  printf("\tker_ridge: %d\n",ker_ridge);
 		}else if(strcmp(cmd,"degree")==0){
 		  fscanf(fp,"%lf",&degree);
 		  printf("\tdegree: %g\n",degree);
@@ -859,8 +859,8 @@ int load_model(const char *model_file_name)
 		  
 			
 		}else if(strcmp(cmd,"ker_ridge")==0){
-		  fscanf(fp,"%lg",&ker_ridge);
-		  printf("\tker_ridge: %g\n",ker_ridge);
+		  fscanf(fp,"%d",&ker_ridge);
+		  printf("\tker_ridge: %d\n",ker_ridge);
 		}else if(strcmp(cmd,"degree")==0){
 		  fscanf(fp,"%lf",&degree);
 		  printf("\tdegree: %g\n",degree);
