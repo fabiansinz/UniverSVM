@@ -231,7 +231,7 @@ void exit_with_help()
 	"	  1 -- convex concave procedure (if you choose a transductive SVM,\n"
 	"	       this option will be chosen automatically)\n"
 	"-G gap : set gap parameter for universum (default 0.05) \n"
-	"-I use_ridge : Add the ridge 1/C to the kernel matrix\n"
+	"-I use_ridge : Add the ridge 1/C to the kernel matrix.\n"
 	"-r coef0 : set coef0 in kernel function (default 0)\n"
 	"-c cost : set the parameter C of C-SVC (default 1)\n"
 	"-C cost : set the parameter C for universum points\n"
@@ -789,9 +789,6 @@ void load_model_param(const char *model_file_name){
 		  }
 		  
 			
-		}else if(strcmp(cmd,"ker_ridge")==0){
-		  fscanf(fp,"%d",&ker_ridge);
-		  printf("\tker_ridge: %d\n",ker_ridge);
 		}else if(strcmp(cmd,"degree")==0){
 		  fscanf(fp,"%lf",&degree);
 		  printf("\tdegree: %g\n",degree);
@@ -858,9 +855,6 @@ int load_model(const char *model_file_name)
 		  }
 		  
 			
-		}else if(strcmp(cmd,"ker_ridge")==0){
-		  fscanf(fp,"%d",&ker_ridge);
-		  printf("\tker_ridge: %d\n",ker_ridge);
 		}else if(strcmp(cmd,"degree")==0){
 		  fscanf(fp,"%lf",&degree);
 		  printf("\tdegree: %g\n",degree);
@@ -1057,6 +1051,9 @@ double calc_multi_class_accuracy(vector< vector <double> > *muYest){
  
 double test_current_model(char *fname){
     int i,j; double y,balconstr; double acc=0;
+    // don't add the ridge while testing on training data
+    int ker_ridge_tmp; ker_ridge_tmp =ker_ridge;
+    ker_ridge = 0;
     // clear vector that stores test results
     Yest.resize(0);
     D.resize(D.size()+1);
@@ -1088,7 +1085,9 @@ double test_current_model(char *fname){
 	printf("   Accuracy= %g (%d/%d)\n",(acc/(double)data_map[TEST].size())*100,((int)acc),data_map[TEST].size());
 	printf("===========================================\n");
     }
- 
+    
+    // set back ker_ridge
+    ker_ridge = ker_ridge_tmp;
     return (acc/(double)data_map[TEST].size())*100;
 }
 
@@ -1423,7 +1422,6 @@ void print_model_file(char* model_file_name){
 
   fprintf(fp2,"b0 %g\n",b0);
   fprintf(fp2,"kernel_type %s\n",kernel_type_table[kernel_type]);
-  fprintf(fp2,"ker_ridge %i\n",ker_ridge);
   fprintf(fp2,"kgamma %.15g\n",kgamma);
   fprintf(fp2,"degree %g\n",degree);
   fprintf(fp2,"coef0 %g\n",coef0);
