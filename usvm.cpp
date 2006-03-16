@@ -137,7 +137,7 @@ double maxa=0;						// largest value of alpha
 double C=1;                     // C, penalty on errors
 double C2=1;                    // C, penalty on universum
 double C3=1;                    // C, penalty on unlabeled
-
+int ker_ridge = 0;
 
 /* Variables for data*/
 vector <lasvm_sparsevector_t*> X; // feature vectors
@@ -231,6 +231,7 @@ void exit_with_help()
 	"	  1 -- convex concave procedure (if you choose a transductive SVM,\n"
 	"	       this option will be chosen automatically)\n"
 	"-G gap : set gap parameter for universum (default 0.05) \n"
+	"-I use_ridge : Add the ridge 1/C to the kernel matrix\n"
 	"-r coef0 : set coef0 in kernel function (default 0)\n"
 	"-c cost : set the parameter C of C-SVC (default 1)\n"
 	"-C cost : set the parameter C for universum points\n"
@@ -315,6 +316,9 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *univ
 				break;
 			case 'G':
 				gap = atof(argv[i]);
+				break;
+			case 'I':
+				ker_ridge = atoi(argv[i]);
 				break;
 			case 'r':
 				coef0 = atof(argv[i]);
@@ -967,6 +971,23 @@ double kernel(int i, int j, void *kparam)
 	  dot=lasvm_sparsevector_get(X[i],j+1);  break;
   }
   kcalcs++;
+
+  if (i==j && ker_ridge!=0){
+    switch(sample_type(i)){
+    case UNIVESAMP:
+      dot += 1/C2;
+      break;
+
+    case UNLABSAMP:
+      dot += 1/C3;
+      break;
+
+    case TRAINSAMP:
+      dot += 1/C;
+      break;
+    }
+  }
+
   return dot;
 }
 
