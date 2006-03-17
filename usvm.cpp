@@ -33,6 +33,10 @@
 #include "svqp2/svqp2.h"
 #include "svqp2/vector.h"
 
+#ifdef MEX
+#include "mex.h"
+#endif
+
 // various kernels 
 #define LINEAR  0
 #define POLY    1
@@ -1810,7 +1814,7 @@ void setup_folds(vector <  vector <int> >* a, vector <  vector <int> >* b){
   
 }
 
-
+#ifndef MEX
 /*******************************************************************************************/
 int main(int argc, char **argv)
 {
@@ -1977,7 +1981,7 @@ int main(int argc, char **argv)
 	    
 	    multi_class_training();
 	    
-("---------------------------------\n");
+	    printf("---------------------------------\n");
 	    printf("           Testing        \n");
 	    printf("---------------------------------\n");
 	    if (data_map[TEST].size() > 0){
@@ -2042,3 +2046,159 @@ int main(int argc, char **argv)
     }  
     return 0;
 }
+#endif
+
+#ifdef MEX
+void mexFunction(
+		 int nlhs,              // Number of left hand side (output) arguments
+		 mxArray *plhs[],       // Array of left hand side arguments
+		 int nrhs,              // Number of right hand side (input) arguments
+		 const mxArray *prhs[]  // Array of right hand side arguments
+		 )
+{
+  double *X_;
+  double *Y_;
+  char cmd_[1000];
+  int argc;
+  char *argv[100];
+  char input_file_name[1024]; input_file_name[0] = '\0';
+  char model_file_name[1024]; model_file_name[0] = '\0';
+  vector<double> accus; D.resize(0);
+  int training_set_size = 0; // remember training set size for special universum training
+
+  if (nrhs!=3) 
+    mexErrMsgTxt("3 input arguments needed.\n");
+    
+  if (nlhs!=2) 
+    mexErrMsgTxt("2 output arguments needed.\n");
+
+  m  = mxGetM (prhs[0]);
+  max_index = mxGetN (prhs[0]);
+  X_ = mxGetPr(prhs[0]);
+
+  if (mxGetM(prhs[1]) != m)
+    mexErrMsgTxt("Dimension error.\n");
+
+  Y_ = mxGetPr(prhs[1]);
+
+  mxGetString(prhs[2],cmd_,1000);
+
+  argv[1] = cmd_;
+  argc = 2;
+  for (char *p=cmd_; *p != '\0'; p++) {
+    if (*p == ' ') {
+      *p = '\0';
+      while (*(++p) == ' ');
+      argv[argc++] = p;
+    }
+  }
+  argv[argc++] = "dummy file";
+ 
+  parse_command_line(argc, argv, input_file_name, NULL, NULL, NULL, NULL, NULL);
+  printf("%f\n",C);
+
+  lasvm_sparsevector_t* v;
+  for (int i=0; i<m; i++) {
+    v=lasvm_sparsevector_create();
+    X.push_back(v);
+    Y.push_back((int)Y_[i]);
+    if (Y[i] >= -1) data_map[TRAIN].push_back(i);
+    else if (Y[i] == -2) data_map[UNIVERSUM].push_back(i); // universum has -2 
+    else if (Y[i] == -3) data_map[UNLABELED].push_back(i);  // unlabeled has -3
+    for (int j=0; j<max_index; j++){
+      if (X_[j*m+i] != 0.0){
+	lasvm_sparsevector_set(X[i],j,X_[j*m+i]);      
+      }
+    }
+  }
+
+  if(kernel_type==RBF){
+    x_square.resize(m);
+    for(int i=0;i<m;i++){
+      x_square[i]=lasvm_sparsevector_dot_product(X[i],X[i]);
+    }
+  }
+
+  if(kgamma==-1)
+    kgamma=1.0/ ((double) max_index); // same default as LIBSVM
+
+  // the remaining part o the main function
+  search_for_different_labels(); // check how many different labels we have (universum and unlabeled excluded)
+  printf("Data contains %i classes \n\n",labels.size());
+  for (int i = 0; i != do_multi_class; ++i){
+    printf(" Training %i  vs. Rest\n",labels[i]);
+  }
+      
+  prob_size =  data_map[TRAIN].size() + data_map[UNIVERSUM].size()*2 + data_map[UNLABELED].size()*2;
+  if (data_map[UNLABELED].size() > 0){
+    ++prob_size; // last special column for transductive constraint
+    compute_extra_K();      // setup extended column
+  }
+      
+      
+  // train
+  SVQP2* sv = new SVQP2(prob_size);
+      
+  // catch special training switch for universum
+  if (use_universum == MULTIUNI){
+    printf("Setting up labels for multiclass universum training ... ");
+    training_set_size = data_map[TRAIN].size();
+    prob_size -=  data_map[UNIVERSUM].size();
+    int newLab = max(labels[0],labels[1])+1;
+    labels.push_back(newLab);
+    for (int i = 0; i !=(int) data_map[UNIVERSUM].size();++i){
+      data_map[TRAIN].push_back(data_map[UNIVERSUM][i]);
+      Y[data_map[UNIVERSUM][i]] = newLab;
+    }
+    data_map[UNIVERSUM].resize(0);
+    do_multi_class = 3;
+    printf("  [OK]\n");
+  }
+      
+  sv = new SVQP2(prob_size);
+
+  if (do_multi_class == 0){ 
+    printf("---------------------------------\n");
+    printf("           Training        \n");
+    printf("---------------------------------\n");
+    setup_problem(sv);
+    training(sv);
+    // processing results
+    set_alphas_b0(sv);
+    plhs[0] = mxCreateDoubleMatrix(m,1,mxREAL);
+    double *p=mxGetPr(plhs[0]);
+    for (int i=0; i<m; i++)
+      p[i]= alpha[i];
+    plhs[1] = mxCreateDoubleMatrix(1,1,mxREAL);
+    *mxGetPr(plhs[1]) = b0;
+    delete sv;
+    
+  }else{
+    ///////////////// Start multi_class ///////////////////////////////
+    multi_alpha.resize(do_multi_class);
+    setup_labels_for_multiclass();
+    if (use_universum == MULTIUNI) --do_multi_class;
+    multi_class_training();
+    plhs[0] = mxCreateDoubleMatrix(m,do_multi_class,mxREAL);
+    plhs[1] = mxCreateDoubleMatrix(1,do_multi_class,mxREAL);
+    double *p1=mxGetPr(plhs[0]);
+    double *p2=mxGetPr(plhs[1]);
+    for (int i=0; i<do_multi_class; i++) {
+      alpha = multi_alpha[i];
+      for (int j=0; j<m; j++)
+	*p1++ = alpha[j];
+      *p2++ = multi_b0[i];
+    }
+  }
+  ///////////////// End multi_class ///////////////////////////////
+
+  for (int i=0; i<m; i++)
+    lasvm_sparsevector_destroy(X[i]);
+  X.clear();
+  Y.clear();
+  data_map[TRAIN].clear();
+  data_map[UNLABELED].clear();
+  data_map[UNIVERSUM].clear();
+  data_map[SV].clear();
+}
+#endif

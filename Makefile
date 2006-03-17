@@ -12,6 +12,13 @@ LSVM2BINSRC= libsvm2bin.cpp
 BIN2LSVMSRC= bin2libsvm.cpp
 
 
+
+universvm_mex: $(USVMSRC)
+	$(CXX) -o svqp2/vector.o -c svqp2/vector.c
+	$(CXX) -o svqp2/messages.o -c svqp2/messages.c
+	$(CXX) -o svqp2/svqp2.o -c svqp2/svqp2.cpp
+	mex -DMEX $(USVMSRC)  svqp2/svqp2.o svqp2/messages.o svqp2/vector.o
+
 universvm: $(USVMSRC)
 	$(CXX) $(CFLAGS) -o $(USVM) $(USVMSRC) $(SVQPSRC) $(ONLINESRC) -lm
 
