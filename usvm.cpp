@@ -130,7 +130,7 @@ int verbosity=1;                  // verbosity level, 0=off
 
 
 /* Variable to store different parameters of data*/
-double un_weight  = 0.0;           // linear coefficient for the special kernel column
+double un_weight  = NAN;           // linear coefficient for the special kernel column
 int mall;           		   // train+test size
 int m=0;                           // training set size
 int m_map[5];                      // map to the training set sizes
@@ -255,6 +255,7 @@ void exit_with_help()
 	"-d degree : set degree in kernel function (default 3)\n"
 	"-g gamma : set gamma in kernel function (default 1/k)\n"
 	"-b bias: use constraint sum alpha_i y_i =0 (default 1=on)\n"
+        "-w weight: the rhs of the balancing constraint (default = sum(y_i)) \n"
 	"-v n : do cross validation with n folds\n"
 	"-M k : perform a multiclass training on k classes labeled with k different\n"
 		"\tintegers >= 0 (default: 0)\n"
@@ -350,7 +351,10 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *univ
 				break;
 			case 'b':
 				use_b0=atoi(argv[i]);
-			    break;
+				break;
+		        case 'w':
+			        un_weight = atof(argv[i]);
+				break;
 			case 'e':
 				epsgr = atof(argv[i]);
 				break;
@@ -1545,14 +1549,15 @@ void setup_problem(SVQP2* sv){
         }
     }else if (optimizer == CCCP || data_map[UNLABELED].size() > 0){
       if (data_map[UNLABELED].size() > 0){ // train transductive svm?
-        un_weight = 0.0;
         b0 = 0.0; 
-       
-        for (int i = 0; i !=(int) data_map[TRAIN].size();++i){
-          un_weight += (double)Y[data_map[TRAIN][i]];
-        }
-        un_weight /= (double) data_map[TRAIN].size();
 
+	if (isnan(un_weight)) {
+	  un_weight = 0.0;
+	  for (int i = 0; i !=(int) data_map[TRAIN].size();++i){
+	    un_weight += (double)Y[data_map[TRAIN][i]];
+	  }
+	  un_weight /= (double) data_map[TRAIN].size();
+	}
        	if (optimizer == CCCP){
 	    setup_ramp_svm_problem(sv,1);
 	}else{
@@ -2095,7 +2100,6 @@ void mexFunction(
   argv[argc++] = "dummy file";
  
   parse_command_line(argc, argv, input_file_name, NULL, NULL, NULL, NULL, NULL);
-  printf("%f\n",C);
 
   lasvm_sparsevector_t* v;
   for (int i=0; i<m; i++) {
