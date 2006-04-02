@@ -5,7 +5,8 @@
  *
  *  Includes parts of LUSH Lisp Universal Shell:
  *  Copyright (C) 2002 Leon Bottou, Yann Le Cun, AT&T Corp, NECI.
- *  Includes parts of libsvm:
+ *
+ *  Includes parts of libsvm.
  *
  *
  *  This program is free software; you can redistribute it and/or modify
