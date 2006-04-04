@@ -2135,7 +2135,7 @@ void mexFunction(
 
   // set default value for C3 (=z = regularization cost for unlabeled examples)
   if (C3 < 0)
-    C3 = (((double)data_map[TRAINING].size())/((double)data_map[UNLABELED].size()))*C;
+    C3 = (((double)data_map[TRAIN].size())/((double)data_map[UNLABELED].size()))*C;
 
 
   // the remaining part o the main function
