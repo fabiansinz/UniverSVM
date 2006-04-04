@@ -142,7 +142,7 @@ double maxa=0;						// largest value of alpha
 /* Regularizer variables*/
 double C=1;                     // C, penalty on errors
 double C2=1;                    // C, penalty on universum
-double C3=1;                    // C, penalty on unlabeled
+double C3=-1.0;                    // C, penalty on unlabeled
 int ker_ridge = 0;
 
 /* Variables for data*/
@@ -1867,6 +1867,11 @@ int main(int argc, char **argv)
     load_data(input_file_name, universum_file_name, testset_file_name,unlabeled_file_name);
     search_for_different_labels(); // check how many different labels we have (universum and unlabeled excluded)
     printf("Data contains %i classes \n\n",labels.size());
+
+    // set default value for z (=C3)
+    if (C3 < 0)
+      C3 = (((double)data_map[TRAIN].size())/((double)data_map[UNLABELED].size()))*C;
+
       
     if (!justtest){// if we train a model
 
@@ -2127,6 +2132,11 @@ void mexFunction(
 
   if(kgamma==-1)
     kgamma=1.0/ ((double) max_index); // same default as LIBSVM
+
+  // set default value for C3 (=z = regularization cost for unlabeled examples)
+  if (C3 < 0)
+    C3 = (((double)data_map[TRAINING].size())/((double)data_map[UNLABELED].size()))*C;
+
 
   // the remaining part o the main function
   search_for_different_labels(); // check how many different labels we have (universum and unlabeled excluded)
