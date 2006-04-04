@@ -13,10 +13,13 @@ BIN2LSVMSRC= bin2libsvm.cpp
 
 
 
-mex: $(USVMSRC)
+svqp: $(SVQPSRC)
 	$(CXX) -fPIC -o svqp2/vector.o -c svqp2/vector.c
 	$(CXX) -fPIC -o svqp2/messages.o -c svqp2/messages.c
 	$(CXX) -fPIC -o svqp2/svqp2.o -c svqp2/svqp2.cpp
+
+mex: $(USVMSRC) $(SVQPSRC)
+	make svqp
 	mex -DMEX $(USVMSRC)  svqp2/svqp2.o svqp2/messages.o svqp2/vector.o
 
 universvm: $(USVMSRC)

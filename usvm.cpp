@@ -2181,9 +2181,9 @@ void mexFunction(
     training(sv);
     // processing results
     set_alphas_b0(sv);
-    plhs[0] = mxCreateDoubleMatrix(m,1,mxREAL);
+    plhs[0] = mxCreateDoubleMatrix(alpha.size(),1,mxREAL); // array for alphas
     double *p=mxGetPr(plhs[0]);
-    for (int i=0; i<m; i++)
+    for (int i=0; i< alpha.size(); i++)
       p[i]= alpha[i];
     plhs[1] = mxCreateDoubleMatrix(1,1,mxREAL);
     *mxGetPr(plhs[1]) = b0;
@@ -2195,13 +2195,13 @@ void mexFunction(
     setup_labels_for_multiclass();
     if (use_universum == MULTIUNI) --do_multi_class;
     multi_class_training();
-    plhs[0] = mxCreateDoubleMatrix(m,do_multi_class,mxREAL);
+    plhs[0] = mxCreateDoubleMatrix(alpha.size(),do_multi_class,mxREAL); // array for alphas
     plhs[1] = mxCreateDoubleMatrix(1,do_multi_class,mxREAL);
     double *p1=mxGetPr(plhs[0]);
     double *p2=mxGetPr(plhs[1]);
     for (int i=0; i<do_multi_class; i++) {
       alpha = multi_alpha[i];
-      for (int j=0; j<m; j++)
+      for (int j=0; j<alpha.size(); j++)
 	*p1++ = alpha[j];
       *p2++ = multi_b0[i];
     }
