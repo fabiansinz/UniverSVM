@@ -2219,5 +2219,6 @@ void mexFunction(
   data_map[UNLABELED].clear();
   data_map[UNIVERSUM].clear();
   data_map[SV].clear();
+  mexEvalString("clear usvm;");// clear all global variables from memory
 }
 #endif
