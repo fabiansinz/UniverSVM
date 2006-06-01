@@ -973,15 +973,20 @@ double kernel(int i, int j, void *kparam)
   switch(kernel_type)
   {
       case LINEAR:
-	  break;
+	  	break;
       case POLY:
-	  dot= pow(kgamma*dot+coef0,degree); break;
+	  	dot= pow(kgamma*dot+coef0,degree);
+		break;
       case RBF:
-	  dot= exp(-kgamma*(x_square[i]+x_square[j]-2*dot)); break;
+	  	dot= exp(-kgamma*(x_square[i]+x_square[j]-2*dot));
+		break;
       case SIGMOID:
-	  dot=tanh(kgamma*dot+coef0); break;
+	  	dot=tanh(kgamma*dot+coef0);
+		break;
       case CUSTOM:
-	  dot=lasvm_sparsevector_get(X[i],j+1);  break;
+	  	dot=lasvm_sparsevector_get(X[i],j); // was j+1, but this was wrong at least in the mex-wrapped version
+ 		//printf("k(%d,%d)=%g\n", i, j, dot);
+		break;
   }
   kcalcs++;
 
