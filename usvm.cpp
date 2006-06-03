@@ -1645,15 +1645,14 @@ void training(SVQP2* sv){
 void search_for_different_labels(){
     labels.resize(0);
     bool found = 0;
-
     for (int i = 0; i !=(int) Y.size(); ++i)
     {
 		for (int j = 0; j != (int) labels.size(); ++j)
 		{
-			if (Y[i] < -1 || Y[i] == labels[j]){ found = 1; break;}
+		  if (Y[i] < -1 || Y[i] == labels[j]){ found = 1; break;}
 		}
 		if (!found && Y[i]>=-1) labels.push_back(Y[i]);
-		if ((int) labels.size() == do_multi_class) break;
+		if ((int) labels.size() == do_multi_class && do_multi_class != 0) break;
 		found = 0;
     }
 
