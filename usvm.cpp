@@ -715,7 +715,7 @@ void load_data(char* input_file_name,char* universum_file_name,char* testset_fil
     // check, if data contains universum/unlabeled points 
     for (int i = m_old; i != m;++i){
       if (Y[i] >= -1) data_map[TRAIN].push_back(i);
-      else if (Y[i] == -2) data_map[UNIVERSUM].push_back(i); // universum has -2 
+      else if (Y[i] == -2) {data_map[UNIVERSUM].push_back(i);}// universum has -2 
       else if (Y[i] == -3) data_map[UNLABELED].push_back(i);  // unlabeled has -3
     }
     m_old = m;
