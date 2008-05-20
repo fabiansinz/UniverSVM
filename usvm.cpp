@@ -9,11 +9,10 @@
  *  Includes parts of libsvm.
  *
  *
- *  This program is free software except for military or military related use; 
- *  If you don't come under the above exception you can redistribute it 
- *  and/or modify it under the terms of the GNU General Public License as 
- *  published by the Free Software Foundation; either version 2 of the 
- *  License, or (at your option) any later version.
+ *  You can redistribute it and/or modify it under the terms of the
+ *  GNU General Public License as published by the Free Software
+ *  Foundation;  either version 2 of the License, or (at your option)
+ *  any later version.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -168,7 +167,7 @@ vector < vector<double> > D;             // 2D vector to store the function valu
 double C_star = VERYBIG;                 // C, penalty for the alpha of the special kernel column
 
 /* Algorithm parameters*/
-double degree=3,kgamma=2,coef0=0;        // kernel params
+double degree=3,kgamma=-1,coef0=0;        // kernel params
 int cl=2;                                // number of classes
 int optimizer=SVQP;                      // strategy of optimization
 int folds=-1;                            // if folds=-1 --> no cross validation, else do folds fold CV
@@ -1349,7 +1348,7 @@ double do_ramp_loop(SVQP2* sv,bool firstiter){
       fvals_without_b.push_back(sv->b[ip[i]] - sv->g[ip[i]]); // y = f(x) - b
   }
   // compute b(t+1) 
-  b0 = (sv->gmin+ sv->gmax)/2.0;
+   b0 = (sv->gmin+ sv->gmax)/2.0;
  
 
   // compute beta(t+1) for training point but only if we are not doing any transduction
