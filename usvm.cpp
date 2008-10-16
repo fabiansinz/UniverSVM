@@ -1355,7 +1355,7 @@ double do_ramp_loop(SVQP2* sv,bool firstiter){
   for(int i=0;i<prob_size-extra;i++){
       y = fvals_without_b[i] + b0; // y = f(x)
       if (optimizer == CCCP){ // only when CCCP is explicitly specified for TRAIN and UNIVERSUM
-	  if (sample_type(sv->Aperm[ip[i]]) == TRAINSAMP && use_universum != RAMPUNI){
+	  if (sample_type(sv->Aperm[ip[i]]) == TRAINSAMP && use_universum == RAMPUNI){
 	      // determine new beta[i](t+1)
 	      if (Y[sv->Aperm[ip[i]]]*y<s_ramp){
 		  beta_diff += (beta[i]-Y[sv->Aperm[ip[i]]]*C)*(beta[i]-Y[sv->Aperm[ip[i]]]*C);
