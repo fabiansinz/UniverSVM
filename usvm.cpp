@@ -9,10 +9,11 @@
  *  Includes parts of libsvm.
  *
  *
- *  You can redistribute it and/or modify it under the terms of the
- *  GNU General Public License as published by the Free Software
- *  Foundation;  either version 2 of the License, or (at your option)
- *  any later version.
+ *  This program is free software except for military or military related use; 
+ *  If you don't come under the above exception you can redistribute it 
+ *  and/or modify it under the terms of the GNU General Public License as 
+ *  published by the Free Software Foundation; either version 2 of the 
+ *  License, or (at your option) any later version.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,15 +25,58 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111, USA
  *
  ***********************************************************************/
- 
+
+ /* Version 1.2  -  16.10.2008 */
+ /*
+ 	  16.10.2008 Fix bug (Matteo Roffilli - roffilli@csr.unibo.it):
+      enable sorting in split_file_load function
+ 	  #include <algorithm>
+ */
+ /*
+ 	  16.10.2008 Fix bug (thanks to Enrico Angelini):
+ 	  kgamma should be fixed at 1/k as in LIBSVM
+ 	  kgamma=-1
+ */
+ /*
+ 	  16.10.2008 Fix bug (thanks to Cash Costello):
+ 	  The documentation is not matching up with the code.
+ 	  The documentation says to set -V to 2 and -o to 1 for the ramp loss.
+ 	  I only see the ramp loss used if -V is set to 0.
+ 	  if (sample_type(sv->Aperm[ip[i]]) == TRAINSAMP && use_universum == RAMPUNI){
+ */
 
 
-#include <stdio.h>
-#include <vector>
-#include <math.h>
+
+#ifdef _WIN32_
+
+	#include <cstdio>
+	#include <vector>
+	#include <cmath>
+	#include <algorithm>
+	
+	//Portability Update by Matteo Roffilli roffilli@csr.unibo.it
+	#define NAN ((float)1e-30) /* Not A Number - Indicate a wrong or non significant value - 
+								 Must always be tested, i.e. never assume that it's "close to zero, anyway" !
+								 Could be any value, esp IEEE error or infinity formats. */
+#else
+
+	#include <stdio.h>
+	#include <vector>
+	#include <math.h>
+
+#endif
+
 
 #include "svqp2/svqp2.h"
 #include "svqp2/vector.h"
+
+#ifdef _WIN32_
+int isnan(double x)
+{
+	if(x<=NAN) return 1;
+		else return 0;
+}
+#endif
 
 #ifdef MEX
 #include "mex.h"
@@ -129,7 +173,7 @@ double s_trans = 0;               // parameter for transductive SVM
 bool s_spec = 0;                  // did the user specify s?
 int verbosity=1;                  // verbosity level, 0=off
 
-
+					 
 /* Variable to store different parameters of data*/
 double un_weight  = NAN;           // linear coefficient for the special kernel column
 int mall;           		   // train+test size
@@ -167,7 +211,7 @@ vector < vector<double> > D;             // 2D vector to store the function valu
 double C_star = VERYBIG;                 // C, penalty for the alpha of the special kernel column
 
 /* Algorithm parameters*/
-double degree=3,kgamma=-1,coef0=0;        // kernel params
+double degree=3,kgamma=-1,coef0=0;       // kernel params
 int cl=2;                                // number of classes
 int optimizer=SVQP;                      // strategy of optimization
 int folds=-1;                            // if folds=-1 --> no cross validation, else do folds fold CV
@@ -714,7 +758,7 @@ void load_data(char* input_file_name,char* universum_file_name,char* testset_fil
     // check, if data contains universum/unlabeled points 
     for (int i = m_old; i != m;++i){
       if (Y[i] >= -1) data_map[TRAIN].push_back(i);
-      else if (Y[i] == -2) {data_map[UNIVERSUM].push_back(i);}// universum has -2 
+      else if (Y[i] == -2) data_map[UNIVERSUM].push_back(i); // universum has -2 
       else if (Y[i] == -3) data_map[UNLABELED].push_back(i);  // unlabeled has -3
     }
     m_old = m;
@@ -1016,7 +1060,8 @@ void compute_extra_K(){
 
 	for (int i = 0; i !=(int) X.size()+1; ++i) global_ext_K[i] = 0.0; // initialize with zero
 	
-	if (C_star == 0.0 and !justtest){
+//	if (C_star == 0.0 and !justtest){
+	if (C_star == 0.0 && !justtest){
 	    printf(" [OK]\n");
 	    return; // if the alpha for balancing is set to 0, there's nothing to do
      	}
@@ -1348,7 +1393,7 @@ double do_ramp_loop(SVQP2* sv,bool firstiter){
       fvals_without_b.push_back(sv->b[ip[i]] - sv->g[ip[i]]); // y = f(x) - b
   }
   // compute b(t+1) 
-   b0 = (sv->gmin+ sv->gmax)/2.0;
+  b0 = (sv->gmin+ sv->gmax)/2.0;
  
 
   // compute beta(t+1) for training point but only if we are not doing any transduction
@@ -1548,7 +1593,6 @@ void print_report(vector<double> testerr){
 
 
 /********************************************************************************************/
-
 
 void setup_problem(SVQP2* sv){
     if (optimizer == SVQP && data_map[UNLABELED].size() == 0){
@@ -1839,7 +1883,7 @@ int main(int argc, char **argv)
     printf("||       sparse training with CCCP and induction       ||\n");
     printf("||       with universum.                               ||\n");
     printf("||                                                     ||\n");
-    printf("||       Version 1.1                                   ||\n");
+    printf("||       Version 1.2                                   ||\n");
     printf("||                                                     ||\n");
     printf("==========================================================\n");
 
@@ -1866,7 +1910,7 @@ int main(int argc, char **argv)
     /**------------------**/
 
     printf("---------------------------------\n");
-    printf("         Initalization   \n");
+    printf("         Initialization   \n");
     printf("---------------------------------\n");
     
     if(split_file_name[0]!='\0') split_file_load(split_file_name);
