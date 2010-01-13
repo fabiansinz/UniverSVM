@@ -62,10 +62,11 @@
 
 	#include <stdio.h>
 	#include <vector>
-	#include <math.h>
-
+ 	#include <math.h>
+        #include <cstring>
+	#include <algorithm>
+	#include <cstdio>
 #endif
-
 
 #include "svqp2/svqp2.h"
 #include "svqp2/vector.h"

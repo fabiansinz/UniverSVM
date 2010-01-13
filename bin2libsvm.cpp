@@ -1,12 +1,17 @@
-
 #include <stdio.h>  
-#include <iostream.h>
-#include <fstream.h>
+#include <vector>
+#include <fstream>
 #include <stdio.h>
-#include <vector.h>
 #include <math.h>
+#include <math.h>
+#include <cstring>
+#include <algorithm>
+#include <cstdio>
+#include <iostream>
+
 
 #include "svqp2/vector.h"
+using namespace std;
 
 vector <lasvm_sparsevector_t*> X; // feature vectors
 vector <int> Y;                   // labels

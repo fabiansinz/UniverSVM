@@ -12,7 +12,7 @@ BIN2LSVM= bin2libsvm
 USVMSRC= usvm.cpp
 LSVM2BINSRC= libsvm2bin.cpp
 BIN2LSVMSRC= bin2libsvm.cpp
-
+MEX = ./mex
 
 
 svqp: $(SVQPSRC)
@@ -22,7 +22,7 @@ svqp: $(SVQPSRC)
 
 mex: $(USVMSRC) $(SVQPSRC)
 	make "USEMEXFLAGS=$(MEXFLAGS)" svqp
-	mex $(MEXFLAGS) $(USVMSRC)  svqp2/svqp2.o svqp2/messages.o svqp2/vector.o
+	$(MEX) $(MEXFLAGS) $(USVMSRC)  svqp2/svqp2.o svqp2/messages.o svqp2/vector.o
 
 universvm: $(USVMSRC)
 	$(CXX) $(CFLAGS) $(USEMEXFLAGS) -o $(USVM) $(USVMSRC) $(SVQPSRC) $(ONLINESRC) -lm
