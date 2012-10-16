@@ -26,6 +26,20 @@
  *
  ***********************************************************************/
 
+ /* Version 1.22 -  04.10.2012 Matteo Roffilli - roffilli@gmail.com */
+ /*
+ 	  04.10.2012 Fix bug on set_alphas_b0 function (thanks to Ferdinand Kaiser <ferdinand.kaiser@tut.fi>)
+ 	  
+ 	  For every model trained with CCCP the value of b0 is calculated correctly during training, but later set to 0 in
+		set_alphas_b0. This problem is fixed by commenting the condition if (optimizer == SVQP)
+		such that b0 is also updated for CCCP optimizers.
+ */
+ 
+ /* Version 1.21 -  08.01.2010 */
+ /*
+ 	  16.10.2010 Fix bug for linux building on g++ (tested on version 4.3.2) (thanks to Anindya Halder)
+ */
+
  /* Version 1.2  -  16.10.2008 */
  /*
  	  16.10.2008 Fix bug (Matteo Roffilli - roffilli@csr.unibo.it):
@@ -49,24 +63,23 @@
 
 #ifdef _WIN32_
 
-	#include <cstdio>
-	#include <vector>
-	#include <cmath>
-	#include <algorithm>
-	
 	//Portability Update by Matteo Roffilli roffilli@csr.unibo.it
 	#define NAN ((float)1e-30) /* Not A Number - Indicate a wrong or non significant value - 
 								 Must always be tested, i.e. never assume that it's "close to zero, anyway" !
 								 Could be any value, esp IEEE error or infinity formats. */
-#else
-
-	#include <stdio.h>
-	#include <vector>
- 	#include <math.h>
-        #include <cstring>
-	#include <algorithm>
-	#include <cstdio>
 #endif
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cmath>
+#include <ctime>
+
+#include <fstream>
+#include <iostream>
+
+#include <vector>
+#include <algorithm>
 
 #include "svqp2/svqp2.h"
 #include "svqp2/vector.h"
@@ -117,9 +130,6 @@ char *optimizer_table[] = {"svqp2","cccp"};
 
 #define MAX_LOOPS 20 // maximum number of loops for tsvm training, should converge before this value, anyway..
 
-#include <fstream>
-#include <ctime>
-#include <iostream>
 
 
 /*********************** Split file storage class ******************/
@@ -1221,9 +1231,9 @@ void set_alphas_b0(SVQP2* sv){
        if(sv->x[i]>maxa) maxa=(sv->x[i]);
        if(-(sv->x[i])>maxa) maxa=-(sv->x[i]);
     }
-    if (optimizer == SVQP){
+    //if (optimizer == SVQP){
       b0=(sv->gmin+ sv->gmax)/2.0;
-    }
+    //}
 
 
     //printf("Maximum alpha=%g\n",maxa);
@@ -1884,7 +1894,7 @@ int main(int argc, char **argv)
     printf("||       sparse training with CCCP and induction       ||\n");
     printf("||       with universum.                               ||\n");
     printf("||                                                     ||\n");
-    printf("||       Version 1.2                                   ||\n");
+    printf("||       Version 1.22                                  ||\n");
     printf("||                                                     ||\n");
     printf("==========================================================\n");
 

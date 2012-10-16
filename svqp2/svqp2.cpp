@@ -41,9 +41,9 @@
 
 #include "svqp2.h"
 
-#include <math.h>
-#include <stdio.h>
-#include <stdarg.h>
+#include <cstdio>
+#include <cstdarg>
+#include <cmath>
 
 
 #ifndef GBAR
@@ -828,7 +828,7 @@ SVQP2::run(bool first, bool last)
   
   // pseudo optimization: I just unswaps the cache and does a cache_fini
   if (!first && last){
-    if (verbosity > 0) printf("\nCleaning and unswapping  cache...\n");
+      printf("\nCleaning and unswapping  cache...\n");
       cache_fini();
       unswap();
       return 0;
@@ -836,7 +836,7 @@ SVQP2::run(bool first, bool last)
 
   // prepare in the first iteration
   if (first){
-      if (verbosity > 0) printf("\nSetting up cache ...\n");
+      printf("\nSetting up cache ...\n");
       cache_init();
   }
 
@@ -880,7 +880,7 @@ SVQP2::run(bool first, bool last)
   // finish
   // finish if there's no iterated optimization
   if (first && last){
-    if (verbosity > 0) printf("\nCleaning and unswapping  cache...\n");
+      printf("\nCleaning and unswapping  cache...\n");
       cache_fini();
       unswap();
   }

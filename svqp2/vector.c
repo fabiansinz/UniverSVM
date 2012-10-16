@@ -27,9 +27,9 @@
  * $Id: vector.c,v 1.4 2006/01/27 06:56:13 agbs Exp $
  **********************************************************************/
 
-#include <stdlib.h>
-#include <stdarg.h>
-#include <stdio.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstdarg>
 #include <string.h>
 
 #include "messages.h"

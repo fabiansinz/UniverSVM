@@ -27,8 +27,8 @@
  * $Id: messages.c,v 1.2 2005/11/16 03:58:41 agbs Exp $
  **********************************************************************/
 
-#include <stdlib.h>
-#include <stdio.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "messages.h"
 

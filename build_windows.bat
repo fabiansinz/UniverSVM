@@ -1,7 +1,8 @@
 rem Makefile for univerSVM software (c) 2005 for .NET 2005 console
-rem by Matteo Roffilli - roffilli@csr.unibo.it
+rem by Matteo Roffilli - roffilli@csr.unibo.it - roffilli@gmail.com
 rem
 rem tested also on Windows Vista + .NET 2008 console
+rem tested also on Windows 7 + .NET 2010 console
 
 del *.obj
 del universvm.exe
