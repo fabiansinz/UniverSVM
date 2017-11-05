@@ -5,6 +5,9 @@ Fast transductive and universum support vector machine.
 
 Code can also be obtained from: http://mloss.org/software/view/19/
 
+To quickly test the USVM use the accompanying dockerfile. Assuming docker is installed, use `docker build --tag usvm .` followed by `docker run -it usvm`. Inside the container use `./universvm -V 0 -o 0 -c 10 -t 0 -T data/test.dat -D output.dat data/train.dat`. That shuld give about 95% accurary. 
+
+
 For further information see:
 
 1. Weston, J., Collobert, R., Sinz, F., Bottou, L., Vapnik, V.: Inference with the Universum. Proceedings of the 23rd international conference on Machine learning ICML 06. pp. 1009–1016. ACM Press (2006).
